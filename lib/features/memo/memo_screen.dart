@@ -55,6 +55,8 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                         children: [
                           FilterPillChip(label: '전체', selected: _filter == '전체', onTap: () => setState(() => _filter = '전체')),
                           const SizedBox(width: 6),
+                          FilterPillChip(label: '할일', selected: _filter == '할일', onTap: () => setState(() => _filter = '할일')),
+                          const SizedBox(width: 6),
                           FilterPillChip(label: '미지정', selected: _filter == '미지정', onTap: () => setState(() => _filter = '미지정')),
                           const SizedBox(width: 6),
                           for (final farm in farms) ...[
@@ -148,6 +150,8 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
     switch (_filter) {
       case '전체':
         return memos;
+      case '할일':
+        return memos.where((m) => m.tags.contains('할일') || m.content.contains('할일:')).toList();
       case '미지정':
         return memos.where((m) => m.farmId == null).toList();
       default:

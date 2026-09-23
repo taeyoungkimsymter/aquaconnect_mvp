@@ -33,7 +33,7 @@ class _MemoComposerState extends State<MemoComposer> {
   Farm? _selectedFarm;
   final Set<String> _selectedExpressions = {};
 
-  static const _expressions = ['배달완료', '폐사', '투약', '방문'];
+  static const _expressions = ['배달완료', '폐사', '투약', '방문', '할일'];
 
   @override
   void dispose() {

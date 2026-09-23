@@ -15,6 +15,10 @@ class MemoCard extends StatelessWidget {
     final isInstitute = memo.authorType == MemoAuthorType.institute;
     final authorBg = isInstitute ? AppColors.brandTint : AppColors.goodTint;
     final authorFg = isInstitute ? AppColors.brand : AppColors.goodDark;
+    final displayTags = <String>{
+      ...memo.tags,
+      if (memo.content.contains('할일:')) '할일',
+    }.toList();
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -64,12 +68,12 @@ class MemoCard extends StatelessWidget {
               ),
             ),
           ],
-          if (memo.tags.isNotEmpty) ...[
+          if (displayTags.isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
               runSpacing: 4,
-              children: memo.tags
+              children: displayTags
                   .map((t) => _Pill(text: t, bg: AppColors.neutralChip, fg: AppColors.neutralIcon, small: true))
                   .toList(),
             ),
