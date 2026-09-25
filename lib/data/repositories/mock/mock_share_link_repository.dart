@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../../models/share_link.dart';
+import '../../models/shared_report_view.dart';
 import '../farm_repository.dart';
 import '../report_repository.dart';
 import '../share_link_repository.dart';
@@ -63,6 +64,22 @@ class MockShareLinkRepository implements ShareLinkRepository {
     final report = await _reportRepository.getLatestReport(link.farmId);
     if (report == null) return null;
 
-    return SharedReportBundle(farm: farm, report: report, link: link);
+    final bundle = SharedReportBundle(farm: farm, report: report, link: link);
+    return SharedReportBundle(
+      farm: farm,
+      report: report,
+      link: link,
+      view: SharedReportView.fromBundle(bundle, withExamples: true),
+    );
+  }
+
+  @override
+  Future<void> setActionDone({required String token, required String actionId, required bool done}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+  }
+
+  @override
+  Future<void> sendInquiry({required String token, required String message}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 500));
   }
 }

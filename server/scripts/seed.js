@@ -12,7 +12,7 @@ const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD || 'demo1234';
 async function main() {
   await query('truncate share_links, reports, memos, disease_info, farms, members, organizations cascade');
 
-  const { rows: orgRows } = await query('insert into organizations (name) values ($1) returning id', ['해강수산질병관리원']);
+  const { rows: orgRows } = await query('insert into organizations (name, phone) values ($1, $2) returning id', ['해강수산질병관리원', '061-555-0123']);
   const orgId = orgRows[0].id;
 
   const passwordHash = await hashPassword(DEMO_PASSWORD);
@@ -166,6 +166,39 @@ async function main() {
     'demo',
     memberId,
   ]);
+
+  // Example content for the farm-side share page (/r/demo): diagnosis text,
+  // flagged photos (empty url = placeholder tile), video link, action list.
+  const { rows: demoReport } = await query(
+    `insert into reports
+       (farm_id, period_label, risk_level, headline, summary, weekly_mortality, avg_temp, last_visit_days,
+        findings, follow_ups, mortality_trend, temp_trend, day_labels, species, diagnosis, flagged_photos, video_url, video_duration)
+     values ($1,'9월 리포트','warning','고수온 지속으로 관찰이 필요합니다','고수온 지속 + 폐사 소폭 증가', 18, 29.1, 9,
+        $2, $3, $4, $5, $6, '우럭', $7, $8, $9, '3분 42초')
+     returning id`,
+    [
+      farmIds['신일수산 1양식장'],
+      ['최근 7일간 누적 폐사 18마리'],
+      ['사료량을 평소의 70%로 줄이세요'],
+      [0, 1, 2, 2, 3, 4, 6],
+      [28.2, 28.5, 28.8, 29, 29.2, 29.3, 29.4],
+      ['9/10', '9/11', '9/12', '9/13', '9/14', '9/15', '9/16'],
+      '이번 달 방문 시 일부 개체에서 아가미 색이 옅어지고 유영이 둔한 모습이 관찰되었습니다. 고수온 스트레스에 의한 것으로 판단되며 즉시 치료가 필요한 수준은 아니지만, 수온이 계속 오르면 폐사가 늘 수 있어 아래 조치를 권장드립니다.',
+      JSON.stringify([
+        { url: '', label: '아가미 색 변화', needsAttention: true },
+        { url: '', label: '표피 상태', needsAttention: false },
+      ]),
+      'https://example.com/videos/demo-field.mp4',
+    ],
+  );
+  const demoActions = [
+    ['사료량 줄이기', '평소의 70% 수준으로, 수온이 내려갈 때까지 유지'],
+    ['산소 공급 늘리기', '새벽 시간대 용존산소가 떨어지지 않게 확인'],
+    ['폐사어 즉시 수거', '수거 후 개체 수를 메모로 남겨주세요'],
+  ];
+  for (const [i, [title, sub]] of demoActions.entries()) {
+    await query('insert into report_actions (report_id, position, title, sub) values ($1,$2,$3,$4)', [demoReport[0].id, i, title, sub]);
+  }
 
   console.log('Seed complete.');
   console.log(`Login: leedonggil@haegang.kr / ${DEMO_PASSWORD}`);

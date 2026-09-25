@@ -66,6 +66,8 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 | POST | `/api/reports/:farmId/generate` | 리포트 새로 생성 |
 | POST/GET | `/api/share-links` | 공유링크 발급/목록 |
 | GET | `/api/public/reports/:token` | **공개** — 공유링크로 리포트 조회 |
+| PATCH | `/api/public/reports/:token/actions/:id` | **공개** — 조치사항 완료 토글 |
+| POST | `/api/public/reports/:token/inquiries` | **공개** — 어가 문의 메모 접수 |
 | GET | `/api/ocean/realtime?station=` | **공개** — NIFS 실시간 수온 프록시 |
 
 ## 알아둘 점
