@@ -8,6 +8,7 @@ import '../../features/auth/login_screen.dart';
 import '../../features/auth/signup_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/info/info_screen.dart';
+import '../../features/memo/memo_detail_screen.dart';
 import '../../features/memo/memo_screen.dart';
 import '../../features/mypage/change_history_screen.dart';
 import '../../features/mypage/daily_summary_settings_screen.dart';
@@ -108,6 +109,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/mypage/daily-summary',
         builder: (context, state) => const DailySummarySettingsScreen(),
+      ),
+      GoRoute(
+        path: '/memos/:memoId',
+        builder: (context, state) => MemoDetailScreen(memoId: state.pathParameters['memoId']!),
       ),
       GoRoute(
         path: '/notifications',

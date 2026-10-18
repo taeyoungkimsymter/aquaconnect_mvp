@@ -33,6 +33,14 @@ class MockMemoRepository implements MemoRepository {
   }
 
   @override
+  Future<Memo?> getMemo(String id) async {
+    for (final m in _memos) {
+      if (m.id == id) return m;
+    }
+    return null;
+  }
+
+  @override
   Future<Uint8List> loadPhoto(String photoId) async {
     final bytes = _photos[photoId];
     if (bytes == null) throw Exception('사진을 찾을 수 없습니다.');

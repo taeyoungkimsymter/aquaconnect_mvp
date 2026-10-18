@@ -201,10 +201,19 @@ memosRouter.post('/', async (req, res) => {
     type: 'memo',
     title: `새 메모 · ${farmName ?? '미지정'}`,
     body: `${memberRows[0]?.name ?? ''}: ${preview.length > 80 ? `${preview.slice(0, 80)}…` : preview}`,
-    link: '/memo',
+    link: `/memos/${memoRow.id}`,
   });
 
   res.status(201).json(toMemoJson({ ...memoRow, farm_name: farmName, photo_ids: photoIds }));
+});
+
+// One memo by id (opened from a 새 메모 / 새 댓글 notification). Scoped to the
+// caller's org like the list, so another org's memo is indistinguishable from
+// a deleted one.
+memosRouter.get('/:id', async (req, res) => {
+  const memo = await loadOrgMemo(req.params.id, req.memberId);
+  if (!memo) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+  res.json(await loadMemoJson(memo.id, await currentMember(req.memberId)));
 });
 
 // 메모 수정: institute memos only (a farm's 문의 stays as the farm sent it),
@@ -339,7 +348,7 @@ memosRouter.post('/:id/comments', async (req, res) => {
       type: 'comment',
       title: `새 댓글 · ${memo.farm_name ?? '미지정'}`,
       body: `${me?.name ?? ''}: ${preview.length > 80 ? `${preview.slice(0, 80)}…` : preview}`,
-      link: '/memo',
+      link: `/memos/${memo.id}`,
     });
   }
   res.status(201).json(toCommentJson(rows[0]));

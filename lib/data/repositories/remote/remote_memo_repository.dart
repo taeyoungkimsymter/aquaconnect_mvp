@@ -63,6 +63,17 @@ class RemoteMemoRepository implements MemoRepository {
   }
 
   @override
+  Future<Memo?> getMemo(String id) async {
+    try {
+      final json = await _api.get('/api/memos/${Uri.encodeComponent(id)}') as Map<String, dynamic>;
+      return Memo.fromJson(json);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404 || e.statusCode == 403) return null;
+      rethrow;
+    }
+  }
+
+  @override
   Future<Memo> addMemo({
     String? farmId,
     String? farmName,

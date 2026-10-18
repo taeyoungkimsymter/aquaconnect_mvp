@@ -29,6 +29,12 @@ final memosProvider = StreamProvider.family<List<Memo>, String?>((ref, farmId) {
   return ref.watch(memoRepositoryProvider).watchMemos(farmId: farmId);
 });
 
+/// A single memo by id (null = deleted / not accessible). autoDispose so each
+/// open re-fetches and picks up deletions.
+final memoByIdProvider = FutureProvider.autoDispose.family<Memo?, String>((ref, id) {
+  return ref.watch(memoRepositoryProvider).getMemo(id);
+});
+
 /// Bytes for one memo photo. Kept (not autoDispose) so scrolling back to a
 /// memo doesn't re-download its thumbnails.
 final memoPhotoProvider = FutureProvider.family<Uint8List, String>((ref, photoId) {

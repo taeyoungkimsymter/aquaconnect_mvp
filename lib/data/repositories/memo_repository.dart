@@ -8,6 +8,10 @@ abstract class MemoRepository {
   /// null returns every memo across the org.
   Stream<List<Memo>> watchMemos({String? farmId});
 
+  /// One memo by its id, or null when it no longer exists (deleted) or isn't
+  /// visible to the signed-in member. Network failures throw.
+  Future<Memo?> getMemo(String id);
+
   Future<Memo> addMemo({
     String? farmId,
     String? farmName,

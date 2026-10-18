@@ -20,8 +20,18 @@ class NotificationsScreen extends ConsumerWidget {
       } catch (_) {}
       ref.invalidate(notificationFeedProvider);
     }
+    if (!context.mounted) return;
     final link = n.link;
-    if (link != null && link != '/notifications' && context.mounted) context.push(link);
+    // Memo notifications made before memos had ids in the link point at the
+    // bare '/memo' tab; which memo they meant can't be recovered safely, so
+    // say so rather than opening an empty/other memo.
+    if ((n.type == 'memo' || n.type == 'comment') && (link == null || !link.startsWith('/memos/'))) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('이전 버전에서 온 알림이라 원본 메모를 찾을 수 없어요. 메모 탭에서 확인해 주세요.')));
+      return;
+    }
+    if (link != null && link != '/notifications') context.push(link);
   }
 
   Future<void> _markAllRead(BuildContext context, WidgetRef ref) async {
