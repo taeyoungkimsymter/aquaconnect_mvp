@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/chips.dart';
 import '../../core/widgets/memo_card.dart';
 import '../../core/widgets/memo_composer_bar.dart';
+import '../../data/models/farm.dart';
 import '../../data/models/memo.dart';
 
 class MemoScreen extends ConsumerStatefulWidget {
@@ -107,10 +108,13 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                             onTap: () => setState(() => _showCompleted = !_showCompleted),
                           ),
                           const SizedBox(width: 6),
-                          for (final farm in farms) ...[
-                            FilterPillChip(label: farm.name, selected: _filter == farm.id, onTap: () => setState(() => _filter = farm.id)),
-                            const SizedBox(width: 6),
-                          ],
+                          // One chip instead of a chip per farm (the row used to grow
+                          // without end): it opens a scrollable list to pick from.
+                          FilterPillChip(
+                            label: '${_selectedFarmName(farms) ?? '양식장'} ▾',
+                            selected: _selectedFarmName(farms) != null,
+                            onTap: () => _pickFarm(farms),
+                          ),
                         ],
                       ),
                     ),
@@ -171,6 +175,63 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
         ),
       ),
     );
+  }
+
+  /// Name of the farm currently filtered on, or null when the filter is not a farm.
+  String? _selectedFarmName(List<Farm> farms) {
+    for (final f in farms) {
+      if (f.id == _filter) return f.name;
+    }
+    return null;
+  }
+
+  Future<void> _pickFarm(List<Farm> farms) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+                child: Text('양식장 선택', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              ),
+              Flexible(
+                child: farms.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: Center(child: Text('등록된 양식장이 없어요.', style: TextStyle(color: AppColors.textMuted))),
+                      )
+                    : ListView(
+                        shrinkWrap: true,
+                        children: [
+                          ListTile(
+                            dense: true,
+                            title: const Text('전체 양식장'),
+                            onTap: () => Navigator.of(sheetContext).pop('전체'),
+                          ),
+                          for (final farm in farms)
+                            ListTile(
+                              dense: true,
+                              title: Text(farm.name),
+                              trailing: _filter == farm.id ? const Icon(Icons.check, size: 18, color: AppColors.brand) : null,
+                              onTap: () => Navigator.of(sheetContext).pop(farm.id),
+                            ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked != null && mounted) setState(() => _filter = picked);
   }
 
   List<Memo> _applyFilter(List<Memo> allMemos) {
