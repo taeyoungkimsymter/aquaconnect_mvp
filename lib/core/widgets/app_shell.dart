@@ -24,7 +24,7 @@ class AppShell extends ConsumerWidget {
   static const _intros = [
     (id: 'home', title: '홈', body: '담당 양식장을 위험도순으로 확인하고, 아래 입력창에서 바로 메모를 남길 수 있어요. 오른쪽 위 종 모양에서 알림을 확인해요.'),
     (id: 'memo', title: '메모', body: '양식장별 메모를 모아 보고, 돋보기로 내용·태그·양식장·작성자를 검색할 수 있어요.'),
-    (id: 'info', title: '정보', body: '바다 수온과 수산 뉴스를 확인해요. 뉴스는 분류별로 골라 볼 수 있어요.'),
+    (id: 'info', title: '정보', body: '해양수산부·국립수산과학원의 수산 뉴스를 분류별로 골라 볼 수 있어요.'),
     (id: 'mypage', title: '마이페이지', body: '양식장·구성원 관리, 바다 위치, 알림·업무 알림 설정은 여기에서 해요.'),
   ];
 

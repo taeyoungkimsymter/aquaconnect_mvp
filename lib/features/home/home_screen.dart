@@ -15,6 +15,7 @@ import '../../data/models/farm_group.dart';
 import '../../data/models/risk_level.dart';
 import '../../data/services/farm_group_store.dart';
 import '../notifications/notification_permission_sheet.dart';
+import '../ocean/ocean_data_section.dart';
 import 'onboarding_checklist_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -128,6 +129,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 delegate: SliverChildListDelegate([
                   const OnboardingChecklistCard(),
                   _ReportStatusCard(),
+                  const SizedBox(height: 20),
+                  const OceanDataSection(),
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
