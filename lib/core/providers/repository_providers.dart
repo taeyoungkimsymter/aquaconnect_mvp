@@ -139,7 +139,7 @@ final digestSettingsStoreProvider = Provider<DigestSettingsStore>((ref) {
   return RemoteDigestSettingsStore(apiClient: ref.watch(apiClientProvider));
 });
 
-/// The signed-in member's "하루 요약 설정" (digest notification prefs). Read by
+/// The signed-in member's "업무 알림 설정" (digest notification prefs). Read by
 /// both the settings screen and the MyPage list row (for its "오후 4:00"
 /// trailing value) so they always agree.
 final digestSettingsProvider = AsyncNotifierProvider<DigestSettingsNotifier, DigestSettings>(DigestSettingsNotifier.new);

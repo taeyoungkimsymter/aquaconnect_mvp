@@ -24,6 +24,9 @@ abstract class MemoRepository {
   /// edit by the signed-in member. Only its author or an owner/director may.
   Future<Memo> updateMemo({required String id, required String content});
 
+  /// Checks a memo off ([completed] true) or reopens it. Any member can.
+  Future<Memo> setCompleted(String id, bool completed);
+
   /// Deletes a memo (and its photos).
   Future<void> deleteMemo(String id);
 

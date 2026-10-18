@@ -29,6 +29,7 @@ function toMemoJson(row, { withEdits = false } = {}) {
     photoIds: row.photo_ids ?? [],
     authorMemberId: row.author_member_id ?? null,
     createdAt: row.created_at,
+    completedAt: row.completed_at ?? null,
     editCount: row.edit_count ?? 0,
     edits: withEdits ? (row.edits ?? []) : [],
     commentCount: row.comment_count ?? 0,
@@ -213,6 +214,19 @@ memosRouter.post('/', async (req, res) => {
 memosRouter.get('/:id', async (req, res) => {
   const memo = await loadOrgMemo(req.params.id, req.memberId);
   if (!memo) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+  res.json(await loadMemoJson(memo.id, await currentMember(req.memberId)));
+});
+
+// 완료 / 완료 취소: any member of the org can check a memo off (any memo, not
+// only 할일 ones) — it's a shared to-do state, not an edit of the memo.
+memosRouter.put('/:id/completion', async (req, res) => {
+  if (typeof req.body?.completed !== 'boolean') return res.status(400).json({ error: '완료 여부가 올바르지 않습니다.' });
+  const memo = await loadOrgMemo(req.params.id, req.memberId);
+  if (!memo) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+  await query('update memos set completed_at = case when $2 then coalesce(completed_at, now()) end where id = $1', [
+    memo.id,
+    req.body.completed,
+  ]);
   res.json(await loadMemoJson(memo.id, await currentMember(req.memberId)));
 });
 

@@ -109,7 +109,7 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 - 알림이 생기는 경우: 양식장 위험도가 올라갈 때(양호→주의/위험, 주의→위험 — 조직 전체), 다른 구성원이
   메모를 남길 때(작성자 제외). 각 구성원이 마이페이지 > 알림 설정에서 종류별로 끌 수 있고, 끈 종류는 알림함에도 쌓이지 않습니다.
 - `GET /api/notifications` 알림함, `POST /api/notifications/:id/read`, `POST /api/notifications/read-all`,
-  `GET|PUT /api/notifications/settings`, `GET|PUT /api/notifications/digest` (하루 요약 설정 `{dailyEnabled, dailyTime:"HH:MM", weeklyEnabled}`),
+  `GET|PUT /api/notifications/settings`, `GET|PUT /api/notifications/digest` (업무 알림 설정 `{dailyEnabled, dailyTime:"HH:MM", weeklyEnabled}`),
   `GET /api/notifications/push/public-key`,
   `POST|DELETE /api/notifications/push/subscriptions`, `POST /api/notifications/test`.
 - 기기 쪽은 `web/push_sw.js` 서비스워커가 받습니다. 안드로이드 Chrome·PC 브라우저는 바로 되고,
@@ -166,10 +166,12 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
   가입 횟수 제한(IP당 1시간 10건)은 회원가입과 공유합니다.
 - 앱 링크는 `<웹 주소>/#/invite/<code>`. 초대 생성·취소·합류는 변경 이력에 남습니다.
 
-### 하루 요약 / 주간 요약
+### 미완료된 업무 / 오늘 해야할 일
 
 서버가 1분마다 확인해서 (`src/lib/digest.js`, 한국 시간 기준) 알림함 + 휴대폰 푸시로 보냅니다.
-- 하루 요약: 각자 정한 시각(기본 16:00)에 위험·주의 양식장 수와 그날 메모·어가 문의 수.
-- 주간 요약: 매주 월요일 08:00에 지난 7일 메모·문의 수와 현재 위험·주의 양식장 수.
+- 업무 = '할일' 태그가 붙었거나 `할일:`이 들어간 메모. 메모는 누구나 완료 처리할 수 있고(`PUT /api/memos/:id/completion` `{completed}`, 할일이 아니어도 가능) `memos.completed_at`에 기록됩니다.
+- 미완료된 업무: 각자 정한 시각(기본 08:30)에 조직의 완료되지 않은 할일 메모 수와 앞쪽 몇 건.
+- 오늘 해야할 일: 같은 시각에 내가 담당하는 양식장의 완료되지 않은 할일 메모.
+- 설정 컬럼 이름은 예전 그대로입니다: `daily_*` = 미완료된 업무, `weekly_enabled`/`last_weekly_on` = 오늘 해야할 일. 발송 시각(`daily_time`)은 둘이 공유합니다.
 - 보낸 날짜를 `digest_settings.last_daily_on/last_weekly_on`에 기록하므로 재시작해도 같은 요약을 두 번 보내지 않습니다.
   이미 지난 시각으로 바꾸면 그날은 건너뛰고 다음 날부터 보냅니다.

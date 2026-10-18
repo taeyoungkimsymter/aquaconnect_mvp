@@ -60,7 +60,8 @@ notificationsRouter.put('/settings', async (req, res) => {
   res.json(toSettingsJson(rows[0]));
 });
 
-// 하루 요약 설정 (sent by lib/digest.js).
+// 요약 알림 설정 (sent by lib/digest.js): dailyEnabled = 미완료된 업무, weeklyEnabled =
+// 오늘 해야할 일 (names kept from when these were the 하루/주간 요약); dailyTime is shared.
 function toDigestJson(row) {
   return {
     dailyEnabled: row?.daily_enabled ?? DIGEST_DEFAULTS.dailyEnabled,
@@ -77,14 +78,14 @@ notificationsRouter.get('/digest', async (req, res) => {
 notificationsRouter.put('/digest', async (req, res) => {
   const { dailyEnabled, dailyTime, weeklyEnabled } = req.body ?? {};
   if (typeof dailyEnabled !== 'boolean' || typeof weeklyEnabled !== 'boolean' || !DAILY_TIME_RE.test(dailyTime ?? '')) {
-    return res.status(400).json({ error: '하루 요약 설정 값이 올바르지 않습니다.' });
+    return res.status(400).json({ error: '업무 알림 설정 값이 올바르지 않습니다.' });
   }
   // Moving the time to one that has already passed today starts tomorrow,
   // instead of firing the moment the setting is saved.
   const now = kstNow();
   const { rows } = await query(
-    `insert into digest_settings (member_id, daily_enabled, daily_time, weekly_enabled, last_daily_on)
-     values ($1, $2, $3, $4, case when $3 <= $5 then $6::date end)
+    `insert into digest_settings (member_id, daily_enabled, daily_time, weekly_enabled, last_daily_on, last_weekly_on)
+     values ($1, $2, $3, $4, case when $3 <= $5 then $6::date end, case when $3 <= $5 then $6::date end)
      on conflict (member_id) do update set
        daily_enabled = excluded.daily_enabled,
        daily_time = excluded.daily_time,
@@ -92,6 +93,10 @@ notificationsRouter.put('/digest', async (req, res) => {
        last_daily_on = case
          when excluded.daily_time <= $5 and coalesce(digest_settings.last_daily_on, '-infinity') < $6::date then $6::date
          else digest_settings.last_daily_on
+       end,
+       last_weekly_on = case
+         when excluded.daily_time <= $5 and coalesce(digest_settings.last_weekly_on, '-infinity') < $6::date then $6::date
+         else digest_settings.last_weekly_on
        end
      returning *`,
     [req.memberId, dailyEnabled, dailyTime, weeklyEnabled, now.time, now.date],

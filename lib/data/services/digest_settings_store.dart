@@ -3,7 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
 
-/// "하루 요약 설정" — the member's digest notification preferences, chosen in
+/// "업무 알림 설정" — the member's 미완료된 업무 / 오늘 해야할 일 notification
+/// preferences (they replaced the 하루 요약 / 주간 요약; field names are kept), chosen in
 /// MyPage. The server sends the summaries (server/src/lib/digest.js), so in
 /// the real app they live on the server ([RemoteDigestSettingsStore]); mock
 /// mode keeps them on the device ([LocalDigestSettingsStore]).
@@ -16,17 +17,17 @@ class DigestSettings {
 
   static const defaults = DigestSettings(
     dailyEnabled: true,
-    dailyTime: TimeOfDay(hour: 16, minute: 0),
+    dailyTime: TimeOfDay(hour: 8, minute: 30),
     weeklyEnabled: true,
   );
 
+  /// 미완료된 업무 알림 on/off.
   final bool dailyEnabled;
 
-  /// Korean time.
+  /// Korean time. One send time for both notifications.
   final TimeOfDay dailyTime;
 
-  /// Day/time are fixed (Monday 08:00), so there's no picker for it, just
-  /// the toggle.
+  /// 오늘 해야할 일 알림 on/off (sent at [dailyTime] too).
   final bool weeklyEnabled;
 
   DigestSettings copyWith({bool? dailyEnabled, TimeOfDay? dailyTime, bool? weeklyEnabled}) {
@@ -37,15 +38,15 @@ class DigestSettings {
     );
   }
 
-  /// "16:00" — the server's format.
+  /// "08:30" — the server's format.
   String get dailyTimeKey =>
       '${dailyTime.hour.toString().padLeft(2, '0')}:${dailyTime.minute.toString().padLeft(2, '0')}';
 
   factory DigestSettings.fromJson(Map<String, dynamic> json) {
-    final parts = (json['dailyTime'] as String? ?? '16:00').split(':');
+    final parts = (json['dailyTime'] as String? ?? '08:30').split(':');
     return DigestSettings(
       dailyEnabled: json['dailyEnabled'] as bool? ?? defaults.dailyEnabled,
-      dailyTime: TimeOfDay(hour: int.tryParse(parts[0]) ?? 16, minute: int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 0),
+      dailyTime: TimeOfDay(hour: int.tryParse(parts[0]) ?? 8, minute: int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 30),
       weeklyEnabled: json['weeklyEnabled'] as bool? ?? defaults.weeklyEnabled,
     );
   }

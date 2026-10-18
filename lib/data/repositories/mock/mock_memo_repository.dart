@@ -102,6 +102,16 @@ class MockMemoRepository implements MemoRepository {
   }
 
   @override
+  Future<Memo> setCompleted(String id, bool completed) async {
+    final index = _memos.indexWhere((m) => m.id == id);
+    if (index == -1) throw Exception('메모를 찾을 수 없습니다.');
+    final updated = _memos[index].copyWith(completed: completed);
+    _memos = [..._memos]..[index] = updated;
+    _emit();
+    return updated;
+  }
+
+  @override
   Future<void> deleteMemo(String id) async {
     _memos = _memos.where((m) => m.id != id).toList();
     _emit();

@@ -68,7 +68,21 @@ class MemoDetailScreen extends ConsumerWidget {
               )
             : ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                children: [MemoCard(memo: memo)],
+                children: [
+                  MemoCard(memo: memo, showCompleteButton: false),
+                  const SizedBox(height: 12),
+                  memo.isCompleted
+                      ? OutlinedButton.icon(
+                          onPressed: () => toggleMemoCompleted(context, ref, memo),
+                          icon: const Icon(Icons.undo, size: 18),
+                          label: const Text('완료 취소'),
+                        )
+                      : FilledButton.icon(
+                          onPressed: () => toggleMemoCompleted(context, ref, memo),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('완료'),
+                        ),
+                ],
               );
         },
       ),

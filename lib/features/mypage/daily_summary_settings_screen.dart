@@ -11,12 +11,11 @@ String formatKoreanTime(TimeOfDay time) {
   return '${isPm ? '오후' : '오전'} $hour12:$minute';
 }
 
-/// "마이페이지 > 하루 요약 설정" — daily digest on/off + send time, plus a
-/// weekly-digest toggle. Both are visible to every role — the daily and
-/// weekly summaries carry the same content, so there's no reason to gate
-/// one by role and not the other. No per-item customization by design (see
-/// ticket): this only ever controls *whether* and *when* the existing
-/// daily/weekly summaries go out.
+/// "마이페이지 > 업무 알림 설정" — on/off for the 미완료된 업무 and 오늘 해야할 일
+/// notifications plus the one send time they share (default 오전 8:30). Visible
+/// to every role. It only controls *whether* and *when* they go out; the
+/// settings fields are still called daily*/weekly* from when these were the
+/// 하루/주간 요약.
 class DailySummarySettingsScreen extends ConsumerWidget {
   const DailySummarySettingsScreen({super.key});
 
@@ -47,7 +46,7 @@ class DailySummarySettingsScreen extends ConsumerWidget {
         backgroundColor: AppColors.surface,
         elevation: 0,
         foregroundColor: AppColors.brandDark,
-        title: const Text('하루 요약 설정', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+        title: const Text('업무 알림 설정', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
       ),
       body: settingsAsync.when(
         data: (settings) => ListView(
@@ -59,33 +58,30 @@ class DailySummarySettingsScreen extends ConsumerWidget {
                 children: [
                   _ToggleRow(
                     icon: Icons.summarize_outlined,
-                    label: '하루 요약 받기',
+                    label: '미완료된 업무 받기',
                     value: settings.dailyEnabled,
                     onChanged: (v) => _save(context, ref.read(digestSettingsProvider.notifier).setDailyEnabled(v)),
                   ),
                   const Divider(height: 1, indent: 16, endIndent: 16),
+                  _ToggleRow(
+                    icon: Icons.today_outlined,
+                    label: '오늘 해야할 일 받기',
+                    value: settings.weeklyEnabled,
+                    onChanged: (v) => _save(context, ref.read(digestSettingsProvider.notifier).setWeeklyEnabled(v)),
+                  ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
                   _TimeRow(
                     time: settings.dailyTime,
-                    enabled: settings.dailyEnabled,
+                    enabled: settings.dailyEnabled || settings.weeklyEnabled,
                     onTap: () => _pickTime(context, ref, settings.dailyTime),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            Container(
-              decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
-              child: _ToggleRow(
-                icon: Icons.calendar_view_week_outlined,
-                label: '주간 요약 받기',
-                value: settings.weeklyEnabled,
-                onChanged: (v) => _save(context, ref.read(digestSettingsProvider.notifier).setWeeklyEnabled(v)),
-              ),
-            ),
             const SizedBox(height: 8),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 4),
-              child: Text('매주 월요일 오전 8시에 지난 7일 요약이 알림으로 와요. 하루 요약은 정한 시각에 그날의 위험·주의 양식장과 메모 수를 알려 드려요.',
+              child: Text('정한 시각(기본 오전 8:30)에 매일 알림이 와요. 미완료된 업무는 아직 완료하지 않은 할일 메모를, 오늘 해야할 일은 내가 담당하는 양식장의 미완료 할일을 알려 드려요.',
                   style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.5)),
             ),
           ],

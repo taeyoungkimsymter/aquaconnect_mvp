@@ -13,11 +13,39 @@ import '../providers/repository_providers.dart';
 import '../providers/data_providers.dart';
 import '../theme/app_colors.dart';
 
+/// Checks a memo off or reopens it (완료 / 완료 취소). Shared by the card's
+/// button and the memo detail screen's button.
+Future<void> toggleMemoCompleted(BuildContext context, WidgetRef ref, Memo memo) async {
+  final repo = ref.read(memoRepositoryProvider);
+  final completing = !memo.isCompleted;
+  try {
+    await repo.setCompleted(memo.id, completing);
+    if (context.mounted && completing) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: const Text('완료 처리했어요'),
+          action: SnackBarAction(label: '되돌리기', onPressed: () => repo.setCompleted(memo.id, false)),
+        ));
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('처리하지 못했어요: $e')));
+    }
+  }
+}
+
 class MemoCard extends ConsumerWidget {
-  const MemoCard({super.key, required this.memo, this.showFarmTag = true});
+  const MemoCard({super.key, required this.memo, this.showFarmTag = true, this.onTap, this.showCompleteButton = true});
 
   final Memo memo;
   final bool showFarmTag;
+
+  /// Tapping the card body (e.g. open the memo's detail screen).
+  final VoidCallback? onTap;
+
+  /// The 완료 button in the card footer. The detail screen has its own.
+  final bool showCompleteButton;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -47,10 +75,13 @@ class MemoCard extends ConsumerWidget {
       if (memo.content.contains('할일:')) '할일',
     }.toList();
 
-    return Container(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: memo.isCompleted ? AppColors.background : AppColors.surface,
         border: Border.all(color: const Color(0xFFE3E8EF)),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -64,6 +95,7 @@ class MemoCard extends ConsumerWidget {
             children: [
               if (showFarmTag) _Pill(text: memo.farmLabel, bg: AppColors.neutralChipStrong, fg: AppColors.textSecondary),
               _Pill(text: memo.authorName, bg: authorBg, fg: authorFg, bold: true),
+              if (memo.isCompleted) const _Pill(text: '완료', bg: AppColors.goodTint, fg: AppColors.goodDark, bold: true),
             ],
           ),
           const SizedBox(height: 6),
@@ -72,7 +104,12 @@ class MemoCard extends ConsumerWidget {
               Expanded(
                 child: Text(
                   memo.content,
-                  style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.55),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: memo.isCompleted ? AppColors.textMuted : AppColors.textPrimary,
+                    decoration: memo.isCompleted ? TextDecoration.lineThrough : null,
+                    height: 1.55,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -114,6 +151,11 @@ class MemoCard extends ConsumerWidget {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    if (showCompleteButton)
+                      _FooterAction(
+                        label: memo.isCompleted ? '완료 취소' : '✓ 완료',
+                        onTap: () => toggleMemoCompleted(context, ref, memo),
+                      ),
                     _FooterAction(
                       label: memo.commentCount > 0 ? '댓글 ${memo.commentCount}' : '댓글 달기',
                       onTap: () => _showComments(context),
@@ -138,6 +180,7 @@ class MemoCard extends ConsumerWidget {
             ],
           ),
         ],
+      ),
       ),
     );
   }

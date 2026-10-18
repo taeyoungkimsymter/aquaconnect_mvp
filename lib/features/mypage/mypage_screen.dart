@@ -144,10 +144,10 @@ class MyPageScreen extends ConsumerWidget {
                     ),
                     _MenuItem(
                       icon: Icons.summarize_outlined,
-                      label: '하루 요약 설정',
+                      label: '업무 알림 설정',
                       trailing: digestSettings == null
                           ? ''
-                          : (digestSettings.dailyEnabled ? formatKoreanTime(digestSettings.dailyTime) : '꺼짐'),
+                          : ((digestSettings.dailyEnabled || digestSettings.weeklyEnabled) ? formatKoreanTime(digestSettings.dailyTime) : '꺼짐'),
                       onTap: () => context.push('/mypage/daily-summary'),
                     ),
                     _MenuItem(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/providers/data_providers.dart';
@@ -19,6 +20,9 @@ class MemoScreen extends ConsumerStatefulWidget {
 class _MemoScreenState extends ConsumerState<MemoScreen> {
   String _filter = '전체';
   bool _searching = false;
+
+  /// 완료된 메모를 목록에 보일지 (기본: 숨김).
+  bool _showCompleted = false;
   String _query = '';
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
@@ -97,6 +101,12 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                           const SizedBox(width: 6),
                           FilterPillChip(label: '미지정', selected: _filter == '미지정', onTap: () => setState(() => _filter = '미지정')),
                           const SizedBox(width: 6),
+                          FilterPillChip(
+                            label: '완료 보기',
+                            selected: _showCompleted,
+                            onTap: () => setState(() => _showCompleted = !_showCompleted),
+                          ),
+                          const SizedBox(width: 6),
                           for (final farm in farms) ...[
                             FilterPillChip(label: farm.name, selected: _filter == farm.id, onTap: () => setState(() => _filter = farm.id)),
                             const SizedBox(width: 6),
@@ -118,7 +128,9 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                   if (filtered.isEmpty) {
                     return Center(
                       child: Text(
-                        _query.trim().isEmpty ? '아직 메모가 없습니다.' : "'${_query.trim()}'에 해당하는 메모가 없습니다.",
+                        _query.trim().isEmpty
+                            ? (!_showCompleted && memos.any((m) => m.isCompleted) ? '완료되지 않은 메모가 없습니다.' : '아직 메모가 없습니다.')
+                            : "'${_query.trim()}'에 해당하는 메모가 없습니다.",
                         style: const TextStyle(color: AppColors.textMuted),
                       ),
                     );
@@ -140,7 +152,7 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                         ),
                         const SizedBox(height: 8),
                         for (final memo in entry.value) ...[
-                          MemoCard(memo: memo),
+                          MemoCard(memo: memo, onTap: () => context.push('/memos/${memo.id}')),
                           const SizedBox(height: 10),
                         ],
                       ],
@@ -161,7 +173,8 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
     );
   }
 
-  List<Memo> _applyFilter(List<Memo> memos) {
+  List<Memo> _applyFilter(List<Memo> allMemos) {
+    final memos = _showCompleted ? allMemos : allMemos.where((m) => !m.isCompleted).toList();
     final byFarm = switch (_filter) {
       '전체' => memos,
       '할일' => memos.where((m) => m.tags.contains('할일') || m.content.contains('할일:')).toList(),

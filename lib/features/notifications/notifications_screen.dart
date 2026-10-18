@@ -31,7 +31,15 @@ class NotificationsScreen extends ConsumerWidget {
         ..showSnackBar(const SnackBar(content: Text('이전 버전에서 온 알림이라 원본 메모를 찾을 수 없어요. 메모 탭에서 확인해 주세요.')));
       return;
     }
-    if (link != null && link != '/notifications') context.push(link);
+    if (link == null || link == '/notifications') return;
+    // Tab routes live inside the bottom-nav shell, so switch to them rather
+    // than pushing them on top of this screen (which renders blank).
+    const tabs = {'/', '/memo', '/info', '/mypage'};
+    if (tabs.contains(link)) {
+      context.go(link);
+    } else {
+      context.push(link);
+    }
   }
 
   Future<void> _markAllRead(BuildContext context, WidgetRef ref) async {
