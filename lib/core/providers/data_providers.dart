@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/disease_info.dart';
+import '../../data/models/news_item.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/memo.dart';
 import '../../data/models/ocean_reading.dart';
@@ -51,6 +52,11 @@ final commentAttachmentProvider = FutureProvider.family<Uint8List, CommentAttach
 /// memo doesn't re-download its thumbnails.
 final memoPhotoProvider = FutureProvider.family<Uint8List, String>((ref, photoId) {
   return ref.watch(memoRepositoryProvider).loadPhoto(photoId);
+});
+
+/// 수산 뉴스 한 건(null = 삭제되었거나 게시 중단). 열 때마다 새로 조회합니다.
+final newsItemProvider = FutureProvider.autoDispose.family<NewsItem?, String>((ref, id) {
+  return ref.watch(newsRepositoryProvider).getNews(id);
 });
 
 final diseaseInfoProvider = FutureProvider<List<DiseaseInfo>>((ref) {

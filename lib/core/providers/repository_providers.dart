@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/disease_info_repository.dart';
+import '../../data/repositories/news_repository.dart';
 import '../../data/repositories/farm_repository.dart';
 import '../../data/repositories/memo_repository.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/org_repository.dart';
 import '../../data/repositories/mock/mock_auth_repository.dart';
 import '../../data/repositories/mock/mock_disease_info_repository.dart';
+import '../../data/repositories/mock/mock_news_repository.dart';
 import '../../data/repositories/mock/mock_farm_repository.dart';
 import '../../data/repositories/mock/mock_memo_repository.dart';
 import '../../data/repositories/mock/mock_notification_repository.dart';
@@ -17,6 +19,7 @@ import '../../data/repositories/mock/mock_report_repository.dart';
 import '../../data/repositories/mock/mock_share_link_repository.dart';
 import '../../data/repositories/remote/remote_auth_repository.dart';
 import '../../data/repositories/remote/remote_disease_info_repository.dart';
+import '../../data/repositories/remote/remote_news_repository.dart';
 import '../../data/repositories/remote/remote_farm_repository.dart';
 import '../../data/repositories/remote/remote_memo_repository.dart';
 import '../../data/repositories/remote/remote_notification_repository.dart';
@@ -74,6 +77,11 @@ final orgRepositoryProvider = Provider<OrgRepository>((ref) {
 });
 
 final webPushServiceProvider = Provider<WebPushService>((ref) => WebPushService());
+
+final newsRepositoryProvider = Provider<NewsRepository>((ref) {
+  if (Env.useMock) return MockNewsRepository();
+  return RemoteNewsRepository(apiClient: ref.watch(apiClientProvider));
+});
 
 final diseaseInfoRepositoryProvider = Provider<DiseaseInfoRepository>((ref) {
   if (Env.useMock) return MockDiseaseInfoRepository();

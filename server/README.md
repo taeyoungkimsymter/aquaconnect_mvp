@@ -182,3 +182,46 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 - 설정 컬럼 이름은 예전 그대로입니다: `daily_*` = 미완료된 업무, `weekly_enabled`/`last_weekly_on` = 오늘 해야할 일. 발송 시각(`daily_time`)은 둘이 공유합니다.
 - 보낸 날짜를 `digest_settings.last_daily_on/last_weekly_on`에 기록하므로 재시작해도 같은 요약을 두 번 보내지 않습니다.
   이미 지난 시각으로 바꾸면 그날은 건너뛰고 다음 날부터 보냅니다.
+
+### 수산 뉴스 (정보 탭)
+
+해양수산부·국립수산과학원 공식 소식을 서버가 **정해진 시각에만** 수집해 `news_items`에 저장하고, 앱은 그 표만 읽습니다
+(앱을 열 때 외부 사이트를 부르지 않습니다). 코드는 `src/lib/news/`, API는 `src/routes/news.js`(앱)·`src/routes/admin.js`(관리자).
+
+**출처와 수집 방식** (실제로 확인한 것만 연결했습니다)
+- 해양수산부 보도자료 — **공식 RSS** `https://www.mof.go.kr/doc/ko/rssFeed.do?bbsSeq=10` (최근 10건, 게시 시각·본문 첫 줄 포함).
+  RSS가 닿지 않는 최근 30일은 공개 목록 페이지(robots.txt가 허용)를 **최초 1회** 읽어 보충합니다.
+- 국립수산과학원 보도자료 — **공식 API·RSS가 없어** 공개 게시판 목록(`/news/actionNewsList.do`)을 읽습니다.
+  robots.txt가 없고, 하루 3회·1쪽(최초 5쪽)·요청 사이 1초 간격으로 제한합니다. 공공데이터포털에서 두 기관의 보도자료 API는 찾지 못했습니다.
+- 앱·API가 노출하는 건 제목·출처·원문 주소·게시일·분류·짧은 소개(해양수산부 RSS 본문 첫 한두 줄)·확인된 지역/어종뿐입니다.
+  기사 전문은 저장하지 않고, 가져온 글은 HTML 태그를 지운 글자로만 저장합니다.
+
+**분류** (`classify.js`, 제목 기준 키워드) — 질병·방역 > 해양환경 > 지원사업 > 양식·정책 순으로 하나를 고르고,
+제목에 수산·양식 근거가 없거나 인사·입찰·행사·동정 같은 소식이면 저장하지 않습니다. 틀린 분류는 관리자 화면에서 고칠 수 있습니다.
+
+**실행 시각** — 한국 시간 매일 **08:00 · 14:00 · 20:00** (`scheduleNewsCollection`, 서버 안의 1분 타이머; 다이제스트와 같은 방식).
+- 슬롯은 `app_config.news_last_slot`에 조건부로 선점하고 DB advisory lock을 함께 써서, 서버가 여러 대여도 한 번만 돕니다.
+- 재배포·재시작 후 놓친 슬롯은 곧바로 한 번 수집합니다. 서버가 계속 떠 있는 Railway 서비스에서 그대로 동작합니다.
+- 서버가 잠드는 환경(서버리스 등)이면 타이머 대신 외부 cron이 `npm run news:collect`를 실행하거나
+  `POST /api/admin/news/collect`(헤더 `X-Admin-Key`)를 호출하게 하세요. `NEWS_COLLECTION_ENABLED=false`로 내장 타이머를 끌 수 있습니다.
+
+**안전장치** — 요청 15초 제한·실패 시 최대 2회 재시도(1초, 2초 간격), 응답 5MB 제한, 허용 도메인 두 곳(및 리다이렉트 검사),
+출처별 실패 격리(한 곳이 실패해도 다른 곳은 수집), 실패해도 기존 뉴스는 그대로 보이고 `news_sources`에 마지막 성공 시각·오류가 남습니다.
+중복은 `(출처, 출처 게시물 ID)`와 정규화한 원문 주소(`url_key`)로 막고, 다시 수집하면 제목·게시일 등을 갱신합니다.
+게시일을 알 수 없으면 `published_at`은 NULL로 둡니다(오늘 날짜로 채우지 않음). **관리자가 숨긴 소식(`is_published=false`)은 재수집해도 되살아나지 않고,
+분류·소개를 고친 소식(`edited_by_admin`)은 덮어쓰지 않습니다.**
+
+**API**
+- 앱(로그인 필요): `GET /api/news?category=disease|environment|support|policy&page=1&pageSize=20` → `{items, page, pageSize, hasMore}`
+  (원문 게시일 최신순, 숨김 제외), `GET /api/news/:id`(숨김·없는 소식은 404).
+- 관리자(`X-Admin-Key`, 일반 사용자 토큰으로는 401): `GET /api/admin/news`(숨김 포함, `category/published/q/page`),
+  `PATCH /api/admin/news/:id` `{category?, summary?, isPublished?}`, `POST /api/admin/news/collect` `{backfill?}`, `GET /api/admin/news/sources`.
+  관리자 대시보드의 "수산 뉴스 관리" 화면이 이 API를 씁니다.
+- 뉴스는 알림·푸시·미확인 배지와 무관합니다(알림 유형에 뉴스가 없음).
+
+**운영**
+- 새 환경변수는 전부 선택입니다: `NEWS_COLLECTION_ENABLED`(기본 켜짐), `NEWS_USER_AGENT`(요청에 붙는 이름·연락처, 기본 `AquaConnectNewsBot/1.0 (+https://aquaconnect-mvp.vercel.app)`).
+  관리자 화면·수동 수집을 쓰려면 기존 `ADMIN_API_KEY`가 필요합니다.
+- 배포 순서: 서버 배포 → `npm run migrate`(015) → 첫 슬롯에서 최근 30일치가 자동 수집됩니다. 바로 채우려면 `npm run news:collect`.
+- 점검: `npm run news:collect`(이 출처를 처음이면 30일치, `-- --backfill`로 다시 보충), `npm test`(분류·파서·시각 계산).
+  DB까지 검증하려면 **전용** DB 주소를 `NEWS_TEST_DATABASE_URL`에 넣고 `npm test`(news_* 표를 비우므로 운영 DB 금지).

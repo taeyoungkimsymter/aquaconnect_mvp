@@ -4,7 +4,10 @@ import { Router } from 'express';
 import { hashPassword } from '../auth.js';
 import { query } from '../db.js';
 import { diffFields, recordAudit } from '../lib/audit.js';
+import { NEWS_CATEGORIES } from '../lib/news/classify.js';
+import { runNewsCollection } from '../lib/news/collector.js';
 import { digitsOnly, normalizeEmail, validateEmail, validatePassword, validatePhone } from '../lib/validators.js';
+import { toNewsJson } from './news.js';
 import { refreshReportQuietly } from './reports.js';
 
 // 관리자 대시보드(admin/) 전용 API — 메모·댓글 관리와 계정 관리.
@@ -283,4 +286,84 @@ adminRouter.get('/photos/:id', async (req, res) => {
   res.set('Content-Type', rows[0].content_type);
   res.set('Cache-Control', 'private, max-age=31536000, immutable');
   res.send(rows[0].data);
+});
+
+// ── 수산 뉴스 ───────────────────────────────────────────────────────
+// 앱 사용자용 /api/news 와 달리 숨긴 소식도 보이고, 수집을 직접 돌릴 수 있습니다.
+// 위의 X-Admin-Key 확인이 이 라우터 전체를 막고 있어, 일반 사용자 토큰으로는 들어올 수 없습니다.
+
+adminRouter.get('/news', async (req, res) => {
+  const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 30));
+  const category = NEWS_CATEGORIES.includes(req.query.category) ? req.query.category : null;
+  const published = req.query.published === 'true' ? true : req.query.published === 'false' ? false : null;
+  const q = typeof req.query.q === 'string' && req.query.q.trim() ? req.query.q.trim() : null;
+  const { rows } = await query(
+    `select * from news_items
+     where ($1::text is null or category = $1)
+       and ($2::boolean is null or is_published = $2)
+       and ($3::text is null or title ilike '%' || $3 || '%')
+     order by published_at desc nulls last, id
+     limit $4 offset $5`,
+    [category, published, q, pageSize + 1, (page - 1) * pageSize],
+  );
+  res.json({
+    items: rows.slice(0, pageSize).map((r) => ({
+      ...toNewsJson(r),
+      isPublished: r.is_published,
+      editedByAdmin: r.edited_by_admin,
+      fetchedAt: r.fetched_at,
+    })),
+    page,
+    pageSize,
+    hasMore: rows.length > pageSize,
+  });
+});
+
+adminRouter.get('/news/sources', async (req, res) => {
+  const { rows } = await query('select * from news_sources order by source');
+  res.json(
+    rows.map((r) => ({
+      source: r.source,
+      name: r.name,
+      lastAttemptAt: r.last_attempt_at,
+      lastSuccessAt: r.last_success_at,
+      lastError: r.last_error,
+      lastFetchedCount: r.last_fetched_count,
+      lastSavedCount: r.last_saved_count,
+    })),
+  );
+});
+
+// 분류·소개 수정, 게시/숨김. 분류나 소개를 고치면 재수집이 덮어쓰지 않도록 표시합니다.
+adminRouter.patch('/news/:id', async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return notFound(res, '소식');
+  const { category, summary, isPublished } = req.body ?? {};
+  if (category !== undefined && !NEWS_CATEGORIES.includes(category)) {
+    return res.status(400).json({ error: '분류 값이 올바르지 않습니다.' });
+  }
+  if (summary !== undefined && summary !== null && (typeof summary !== 'string' || summary.length > 300)) {
+    return res.status(400).json({ error: '소개는 300자 이내의 글자여야 합니다.' });
+  }
+  if (isPublished !== undefined && typeof isPublished !== 'boolean') {
+    return res.status(400).json({ error: '게시 여부 값이 올바르지 않습니다.' });
+  }
+  const textEdit = category !== undefined || summary !== undefined;
+  const { rows } = await query(
+    `update news_items set
+       category = coalesce($2, category),
+       summary = case when $3::boolean then nullif(trim($4), '') else summary end,
+       is_published = coalesce($5, is_published),
+       edited_by_admin = edited_by_admin or $6
+     where id = $1 returning *`,
+    [req.params.id, category ?? null, summary !== undefined, summary ?? null, isPublished ?? null, textEdit],
+  );
+  if (!rows[0]) return notFound(res, '소식');
+  res.json({ ...toNewsJson(rows[0]), isPublished: rows[0].is_published, editedByAdmin: rows[0].edited_by_admin });
+});
+
+// 수동 수집. 정해진 시각의 자동 수집과 같은 코드를 쓰고, 동시에 두 번 돌지 않습니다.
+adminRouter.post('/news/collect', async (req, res) => {
+  const outcome = await runNewsCollection({ backfill: req.body?.backfill === true ? true : undefined });
+  res.json(outcome);
 });
