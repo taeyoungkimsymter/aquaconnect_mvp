@@ -300,6 +300,23 @@ memosRouter.delete('/:id', async (req, res) => {
 // ── 댓글 ──────────────────────────────────────────────────────────────
 const MAX_COMMENT_LENGTH = 1000;
 
+const MAX_COMMENT_PHOTOS = 5;
+const MAX_COMMENT_FILES = 3;
+const MAX_COMMENT_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_COMMENT_TOTAL_BYTES = 24 * 1024 * 1024; // keeps the base64 JSON under the 40mb body limit
+const MAX_MENTIONS = 10;
+// Documents only — anything a browser could run (html, svg, js, exe…) is refused.
+const ALLOWED_FILE_EXTENSIONS = new Set([
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'hwp', 'hwpx', 'txt', 'csv', 'zip',
+]);
+
+const ATTACHMENTS_SQL = `coalesce(
+  (select json_agg(json_build_object('id', a.id, 'kind', a.kind, 'fileName', a.file_name,
+                                     'contentType', a.content_type, 'size', a.size) order by a.created_at)
+   from memo_comment_attachments a where a.comment_id = c.id),
+  '[]'::json
+) as attachments`;
+
 function toCommentJson(row) {
   return {
     id: row.id,
@@ -308,7 +325,44 @@ function toCommentJson(row) {
     authorName: row.author_name,
     content: row.content,
     createdAt: row.created_at,
+    mentions: row.mentions ?? [],
+    attachments: row.attachments ?? [],
   };
+}
+
+// Validates and decodes a comment's attachments: [{kind, fileName, contentType, dataBase64}].
+function decodeAttachments(list) {
+  if (list == null) return { decoded: [] };
+  if (!Array.isArray(list)) return { error: '첨부 형식이 올바르지 않습니다.' };
+  const decoded = [];
+  let photos = 0;
+  let files = 0;
+  let total = 0;
+  for (const item of list) {
+    const kind = item?.kind;
+    const data = Buffer.from(String(item?.dataBase64 ?? ''), 'base64');
+    if (data.length === 0) return { error: '첨부 데이터가 비어 있습니다.' };
+    total += data.length;
+    if (kind === 'photo') {
+      if (!ALLOWED_PHOTO_TYPES.has(item.contentType)) return { error: '지원하지 않는 사진 형식입니다.' };
+      if (data.length > MAX_PHOTO_BYTES) return { error: '사진 한 장은 5MB 이하여야 합니다.' };
+      if (++photos > MAX_COMMENT_PHOTOS) return { error: `사진은 최대 ${MAX_COMMENT_PHOTOS}장까지 첨부할 수 있습니다.` };
+      decoded.push({ kind, fileName: String(item.fileName || 'photo.jpg').slice(0, 200), contentType: item.contentType, data });
+    } else if (kind === 'file') {
+      const fileName = String(item.fileName ?? '').trim().slice(0, 200);
+      const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
+      if (!ALLOWED_FILE_EXTENSIONS.has(ext)) {
+        return { error: `첨부할 수 없는 파일 형식입니다. (${[...ALLOWED_FILE_EXTENSIONS].join(', ')})` };
+      }
+      if (data.length > MAX_COMMENT_FILE_BYTES) return { error: '파일 하나는 10MB 이하여야 합니다.' };
+      if (++files > MAX_COMMENT_FILES) return { error: `파일은 최대 ${MAX_COMMENT_FILES}개까지 첨부할 수 있습니다.` };
+      decoded.push({ kind, fileName, contentType: 'application/octet-stream', data });
+    } else {
+      return { error: '첨부 형식이 올바르지 않습니다.' };
+    }
+  }
+  if (total > MAX_COMMENT_TOTAL_BYTES) return { error: '첨부 용량이 너무 큽니다. (합계 24MB 이하)' };
+  return { decoded };
 }
 
 async function loadOrgMemo(memoId, memberId) {
@@ -326,46 +380,125 @@ async function loadOrgMemo(memoId, memberId) {
 memosRouter.get('/:id/comments', async (req, res) => {
   const memo = await loadOrgMemo(req.params.id, req.memberId);
   if (!memo) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
-  const { rows } = await query('select * from memo_comments where memo_id = $1 order by created_at', [memo.id]);
+  const { rows } = await query(
+    `select c.*, ${ATTACHMENTS_SQL} from memo_comments c where c.memo_id = $1 order by c.created_at`,
+    [memo.id],
+  );
   res.json(rows.map(toCommentJson));
 });
 
 memosRouter.post('/:id/comments', async (req, res) => {
   const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
-  if (!content) return res.status(400).json({ error: '댓글 내용을 입력해주세요.' });
   if (content.length > MAX_COMMENT_LENGTH) {
     return res.status(400).json({ error: `댓글은 ${MAX_COMMENT_LENGTH}자 이내로 입력해주세요.` });
   }
+  const { decoded, error } = decodeAttachments(req.body?.attachments);
+  if (error) return res.status(400).json({ error });
+  if (!content && decoded.length === 0) return res.status(400).json({ error: '댓글 내용을 입력해주세요.' });
   const memo = await loadOrgMemo(req.params.id, req.memberId);
   if (!memo) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
 
+  // 사람 호출: only active members of this org, never yourself.
+  const wanted = Array.isArray(req.body?.mentionedMemberIds)
+    ? [...new Set(req.body.mentionedMemberIds.filter((id) => typeof id === 'string' && UUID_RE.test(id)))]
+    : [];
+  if (wanted.length > MAX_MENTIONS) return res.status(400).json({ error: `한 번에 ${MAX_MENTIONS}명까지 호출할 수 있습니다.` });
+  const { rows: mentioned } = wanted.length
+    ? await query(
+        `select id, name from members where id = any($1::uuid[]) and org_id = $2 and status = 'active' and id <> $3`,
+        [wanted, memo.org_id, req.memberId],
+      )
+    : { rows: [] };
+
   const me = await currentMember(req.memberId);
-  const { rows } = await query(
-    'insert into memo_comments (memo_id, author_member_id, author_name, content) values ($1, $2, $3, $4) returning *',
-    [memo.id, req.memberId, me?.name ?? '', content],
-  );
+  const client = await pool.connect();
+  let commentRow;
+  try {
+    await client.query('begin');
+    const { rows } = await client.query(
+      `insert into memo_comments (memo_id, author_member_id, author_name, content, mentions)
+       values ($1, $2, $3, $4, $5::jsonb) returning *`,
+      [memo.id, req.memberId, me?.name ?? '', content, JSON.stringify(mentioned.map((m) => ({ id: m.id, name: m.name })))],
+    );
+    commentRow = rows[0];
+    for (const att of decoded) {
+      await client.query(
+        `insert into memo_comment_attachments (comment_id, kind, file_name, content_type, size, data)
+         values ($1, $2, $3, $4, $5, $6)`,
+        [commentRow.id, att.kind, att.fileName, att.contentType, att.data.length, att.data],
+      );
+    }
+    await client.query('commit');
+  } catch (err) {
+    await client.query('rollback');
+    throw err;
+  } finally {
+    client.release();
+  }
   // Commenting on a memo means you've read it.
   await markRead([memo.id], req.memberId);
 
-  // Tell the memo's author and everyone else already in the thread.
+  const photoCount = decoded.filter((d) => d.kind === 'photo').length;
+  const fileCount = decoded.length - photoCount;
+  const preview = [content.replace(/s+/g, ' '), photoCount ? `사진 ${photoCount}장` : '', fileCount ? `파일 ${fileCount}개` : '']
+    .filter(Boolean)
+    .join(' ');
+  const body = `${me?.name ?? ''}: ${preview.length > 80 ? `${preview.slice(0, 80)}…` : preview}`;
+  const where = memo.farm_name ?? '미지정';
+
+  // The people called get their own 호출 notification…
+  const calledIds = mentioned.map((m) => m.id);
+  if (calledIds.length) {
+    await notifyMembers({
+      memberIds: calledIds,
+      type: 'comment',
+      title: `${me?.name ?? ''}님이 회원님을 호출했어요 · ${where}`,
+      body,
+      link: `/memos/${memo.id}`,
+    });
+  }
+  // …and the memo's author plus everyone else in the thread hear about the comment.
   const { rows: threadRows } = await query(
     'select distinct author_member_id as id from memo_comments where memo_id = $1 and author_member_id is not null',
     [memo.id],
   );
   const recipients = [...new Set([memo.author_member_id, ...threadRows.map((r) => r.id)])].filter(
-    (id) => id && id !== req.memberId,
+    (id) => id && id !== req.memberId && !calledIds.includes(id),
   );
   if (recipients.length) {
-    const preview = content.replace(/\s+/g, ' ');
     await notifyMembers({
       memberIds: recipients,
       type: 'comment',
-      title: `새 댓글 · ${memo.farm_name ?? '미지정'}`,
-      body: `${me?.name ?? ''}: ${preview.length > 80 ? `${preview.slice(0, 80)}…` : preview}`,
+      title: `새 댓글 · ${where}`,
+      body,
       link: `/memos/${memo.id}`,
     });
   }
-  res.status(201).json(toCommentJson(rows[0]));
+  const { rows: full } = await query(`select c.*, ${ATTACHMENTS_SQL} from memo_comments c where c.id = $1`, [commentRow.id]);
+  res.status(201).json(toCommentJson(full[0]));
+});
+
+// 댓글 첨부 내려받기: photos are shown inline, files always download. Scoped to the org.
+memosRouter.get('/:id/comments/:commentId/attachments/:attachmentId', async (req, res) => {
+  const memo = await loadOrgMemo(req.params.id, req.memberId);
+  if (!memo || !UUID_RE.test(req.params.commentId) || !UUID_RE.test(req.params.attachmentId)) {
+    return res.status(404).json({ error: '첨부를 찾을 수 없습니다.' });
+  }
+  const { rows } = await query(
+    `select a.kind, a.file_name, a.content_type, a.data
+     from memo_comment_attachments a join memo_comments c on c.id = a.comment_id
+     where a.id = $1 and c.id = $2 and c.memo_id = $3`,
+    [req.params.attachmentId, req.params.commentId, memo.id],
+  );
+  const att = rows[0];
+  if (!att) return res.status(404).json({ error: '첨부를 찾을 수 없습니다.' });
+  res.set('Content-Type', att.content_type);
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Cache-Control', 'private, max-age=31536000, immutable');
+  if (att.kind === 'file') {
+    res.set('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(att.file_name)}`);
+  }
+  res.send(att.data);
 });
 
 // 댓글 삭제: its author or an owner/director.

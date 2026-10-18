@@ -166,6 +166,13 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
   가입 횟수 제한(IP당 1시간 10건)은 회원가입과 공유합니다.
 - 앱 링크는 `<웹 주소>/#/invite/<code>`. 초대 생성·취소·합류는 변경 이력에 남습니다.
 
+### 댓글 첨부 · 사람 호출
+
+- `POST /api/memos/:id/comments` `{content, mentionedMemberIds?, attachments?: [{kind: photo|file, fileName, contentType, dataBase64}]}` — 글 없이 첨부만 보내도 됩니다.
+  사진은 jpeg/png/webp 5MB 이하 최대 5장, 파일은 pdf·doc(x)·xls(x)·ppt(x)·hwp(x)·txt·csv·zip 10MB 이하 최대 3개(합계 24MB). 그 밖의 형식(html·svg·exe 등)은 거부합니다.
+- 첨부 받기: `GET /api/memos/:id/comments/:commentId/attachments/:attachmentId` (같은 조직만; 파일은 항상 내려받기로 응답).
+- 호출한 구성원(같은 조직의 활동 중인 사람, 본인 제외, 최대 10명)은 따로 "호출했어요" 알림을 받고, 나머지 스레드 참여자는 기존 "새 댓글" 알림을 받습니다.
+
 ### 미완료된 업무 / 오늘 해야할 일
 
 서버가 1분마다 확인해서 (`src/lib/digest.js`, 한국 시간 기준) 알림함 + 휴대폰 푸시로 보냅니다.

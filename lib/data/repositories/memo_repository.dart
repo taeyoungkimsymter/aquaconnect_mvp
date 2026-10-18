@@ -39,7 +39,21 @@ abstract class MemoRepository {
   /// A memo's 댓글, oldest first.
   Future<List<MemoComment>> listComments(String memoId);
 
-  Future<MemoComment> addComment({required String memoId, required String content});
+  /// [content] may be empty when [attachments] (사진·파일) are given. [mentionedMemberIds]
+  /// are the members called with "@이름" — they get their own notification.
+  Future<MemoComment> addComment({
+    required String memoId,
+    required String content,
+    List<String> mentionedMemberIds,
+    List<CommentAttachmentUpload> attachments,
+  });
+
+  /// Bytes of one of a comment's attachments.
+  Future<Uint8List> loadCommentAttachment({
+    required String memoId,
+    required String commentId,
+    required String attachmentId,
+  });
 
   /// Only the comment's author or an owner/director may.
   Future<void> deleteComment({required String memoId, required String commentId});

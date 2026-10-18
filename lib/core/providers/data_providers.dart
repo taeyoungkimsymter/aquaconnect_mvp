@@ -35,6 +35,18 @@ final memoByIdProvider = FutureProvider.autoDispose.family<Memo?, String>((ref, 
   return ref.watch(memoRepositoryProvider).getMemo(id);
 });
 
+/// Bytes of one 댓글 attachment (photo or file). Kept, like memo photos, so
+/// reopening the thread doesn't re-download them.
+typedef CommentAttachmentKey = ({String memoId, String commentId, String attachmentId});
+
+final commentAttachmentProvider = FutureProvider.family<Uint8List, CommentAttachmentKey>((ref, key) {
+  return ref.watch(memoRepositoryProvider).loadCommentAttachment(
+        memoId: key.memoId,
+        commentId: key.commentId,
+        attachmentId: key.attachmentId,
+      );
+});
+
 /// Bytes for one memo photo. Kept (not autoDispose) so scrolling back to a
 /// memo doesn't re-download its thumbnails.
 final memoPhotoProvider = FutureProvider.family<Uint8List, String>((ref, photoId) {

@@ -14,6 +14,7 @@ class MockMemoRepository implements MemoRepository {
   late List<Memo> _memos;
   final _photos = <String, Uint8List>{};
   final _comments = <String, List<MemoComment>>{};
+  final _attachmentBytes = <String, Uint8List>{};
   final _controller = StreamController<List<Memo>>.broadcast();
 
   List<Memo> get _sorted => [..._memos]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -135,11 +136,28 @@ class MockMemoRepository implements MemoRepository {
   Future<List<MemoComment>> listComments(String memoId) async => List.unmodifiable(_comments[memoId] ?? const []);
 
   @override
-  Future<MemoComment> addComment({required String memoId, required String content}) async {
+  Future<MemoComment> addComment({
+    required String memoId,
+    required String content,
+    List<String> mentionedMemberIds = const [],
+    List<CommentAttachmentUpload> attachments = const [],
+  }) async {
     final text = content.trim();
-    if (text.isEmpty) throw Exception('댓글 내용을 입력해주세요.');
+    if (text.isEmpty && attachments.isEmpty) throw Exception('댓글 내용을 입력해주세요.');
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final saved = <CommentAttachment>[];
+    for (var i = 0; i < attachments.length; i++) {
+      final a = attachments[i];
+      final id = 'attachment-$stamp-$i';
+      _attachmentBytes[id] = a.bytes;
+      saved.add(CommentAttachment(id: id, isPhoto: a.isPhoto, fileName: a.fileName, contentType: a.contentType, size: a.bytes.length));
+    }
     final comment = MemoComment(
-      id: 'comment-${DateTime.now().microsecondsSinceEpoch}',
+      id: 'comment-$stamp',
+      mentions: [
+        for (final id in mentionedMemberIds) CommentMention(memberId: id, name: id == MockSeed.currentMember.id ? MockSeed.currentMember.name : id),
+      ],
+      attachments: saved,
       memoId: memoId,
       authorMemberId: MockSeed.currentMember.id,
       authorName: MockSeed.currentMember.name,
@@ -149,6 +167,17 @@ class MockMemoRepository implements MemoRepository {
     final list = _comments.putIfAbsent(memoId, () => [])..add(comment);
     _replace(memoId, (m) => m.copyWith(commentCount: list.length, readByMe: true));
     return comment;
+  }
+
+  @override
+  Future<Uint8List> loadCommentAttachment({
+    required String memoId,
+    required String commentId,
+    required String attachmentId,
+  }) async {
+    final bytes = _attachmentBytes[attachmentId];
+    if (bytes == null) throw Exception('첨부를 찾을 수 없습니다.');
+    return bytes;
   }
 
   @override
