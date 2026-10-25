@@ -49,7 +49,7 @@ class _ShareLinkSheetState extends ConsumerState<_ShareLinkSheet> {
     try {
       final links = await ref.read(shareLinkRepositoryProvider).listShareLinks(farmId: widget.farm.id);
       final active = links.where((l) => l.isActive).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      if (active.isEmpty) return _createLink(_expiry);
+      if (active.isEmpty) return await _createLink(_expiry);
       if (!mounted) return;
       setState(() {
         _link = active.first;
