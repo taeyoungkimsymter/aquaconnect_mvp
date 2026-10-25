@@ -36,6 +36,8 @@ function toMemoJson(row, { withEdits = false } = {}) {
     // Members other than the author who have seen it.
     readCount: row.read_count ?? 0,
     readByMe: row.read_by_me ?? false,
+    // A 댓글 on it called the requesting member (@이름).
+    mentionsMe: row.mentions_me ?? false,
   };
 }
 
@@ -59,7 +61,9 @@ const SOCIAL_SQL = `(select count(*)::int from memo_comments c where c.memo_id =
 // [meParam] is the placeholder number holding the requesting member's id
 // (for read_by_me).
 const memoSelectSql = (meParam) => `select mm.*, f.name as farm_name, ${PHOTO_IDS_SQL}, ${EDITS_SQL}, ${SOCIAL_SQL},
-    exists (select 1 from memo_reads r where r.memo_id = mm.id and r.member_id = $${meParam}) as read_by_me
+    exists (select 1 from memo_reads r where r.memo_id = mm.id and r.member_id = $${meParam}) as read_by_me,
+    exists (select 1 from memo_comments c where c.memo_id = mm.id
+      and c.mentions @> jsonb_build_array(jsonb_build_object('id', $${meParam}::uuid::text))) as mentions_me
   from memos mm left join farms f on f.id = mm.farm_id`;
 
 async function currentMember(memberId) {

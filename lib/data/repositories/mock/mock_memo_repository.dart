@@ -165,7 +165,11 @@ class MockMemoRepository implements MemoRepository {
       createdAt: DateTime.now(),
     );
     final list = _comments.putIfAbsent(memoId, () => [])..add(comment);
-    _replace(memoId, (m) => m.copyWith(commentCount: list.length, readByMe: true));
+    _replace(memoId, (m) => m.copyWith(
+          commentCount: list.length,
+          readByMe: true,
+          mentionsMe: m.mentionsMe || mentionedMemberIds.contains(MockSeed.currentMember.id),
+        ));
     return comment;
   }
 

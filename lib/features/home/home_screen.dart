@@ -14,6 +14,7 @@ import '../notifications/notification_permission_sheet.dart';
 import '../ocean/ocean_data_section.dart';
 import 'farm_region_section.dart';
 import 'onboarding_checklist_card.dart';
+import 'task_status_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -87,6 +88,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   const OnboardingChecklistCard(),
+                  const TaskStatusCard(),
                   _ReportStatusCard(),
                   const SizedBox(height: 20),
                   const OceanDataSection(),

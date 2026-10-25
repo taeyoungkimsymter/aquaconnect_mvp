@@ -18,10 +18,12 @@ import '../theme/app_colors.dart';
 Future<void> toggleMemoCompleted(BuildContext context, WidgetRef ref, Memo memo) async {
   final repo = ref.read(memoRepositoryProvider);
   final completing = !memo.isCompleted;
+  // 완료로 이 위젯이 목록에서 사라져도(홈의 업무 현황) 되돌리기 팝업은 띄울 수 있게 미리 잡아 둔다.
+  final messenger = ScaffoldMessenger.of(context);
   try {
     await repo.setCompleted(memo.id, completing);
-    if (context.mounted && completing) {
-      ScaffoldMessenger.of(context)
+    if (completing) {
+      messenger
         ..clearSnackBars()
         ..showSnackBar(SnackBar(
           content: const Text('완료 처리했어요'),
@@ -31,9 +33,7 @@ Future<void> toggleMemoCompleted(BuildContext context, WidgetRef ref, Memo memo)
         ));
     }
   } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('처리하지 못했어요: $e')));
-    }
+    messenger.showSnackBar(SnackBar(content: Text('처리하지 못했어요: $e')));
   }
 }
 

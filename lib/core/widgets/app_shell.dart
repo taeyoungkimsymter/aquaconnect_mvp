@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../providers/memo_view_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../theme/app_colors.dart';
 import 'responsive_mobile_frame.dart';
@@ -82,7 +83,13 @@ class AppShell extends ConsumerWidget {
                   final color = selected ? AppColors.brand : AppColors.textMuted;
                   return Expanded(
                     child: InkWell(
-                      onTap: () => navigationShell.goBranch(i, initialLocation: i == navigationShell.currentIndex),
+                      onTap: () {
+                        // 하단 메뉴로 메모에 들어오면 '전체' 탭으로 연다 (홈에서 연결된 진입과 구분).
+                        if (i == 1 && navigationShell.currentIndex != 1) {
+                          ref.read(memoViewRequestProvider.notifier).state = MemoViewRequest.general();
+                        }
+                        navigationShell.goBranch(i, initialLocation: i == navigationShell.currentIndex);
+                      },
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [

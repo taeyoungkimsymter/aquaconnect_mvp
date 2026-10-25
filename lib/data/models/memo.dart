@@ -47,6 +47,7 @@ class Memo {
     this.readCount = 0,
     this.readByMe = false,
     this.completedAt,
+    this.mentionsMe = false,
   });
 
   final String id;
@@ -92,12 +93,15 @@ class Memo {
 
   bool get isCompleted => completedAt != null;
 
+  /// A 댓글 on this memo called the signed-in member (@이름).
+  final bool mentionsMe;
+
   /// A 할일 memo — the tag, or a "할일:" line in the text.
   bool get isTask => tags.contains('할일') || content.contains('할일:');
 
   String get farmLabel => farmName ?? '미지정';
 
-  Memo copyWith({String? content, List<MemoEdit>? edits, int? commentCount, bool? readByMe, bool? completed}) => Memo(
+  Memo copyWith({String? content, List<MemoEdit>? edits, int? commentCount, bool? readByMe, bool? completed, bool? mentionsMe}) => Memo(
         id: id,
         orgId: orgId,
         farmId: farmId,
@@ -117,6 +121,7 @@ class Memo {
         readCount: readCount,
         readByMe: readByMe ?? this.readByMe,
         completedAt: completed == null ? completedAt : (completed ? (completedAt ?? DateTime.now()) : null),
+        mentionsMe: mentionsMe ?? this.mentionsMe,
       );
 
   factory Memo.fromJson(Map<String, dynamic> json) => Memo(
@@ -141,6 +146,7 @@ class Memo {
         readCount: json['readCount'] as int? ?? 0,
         readByMe: json['readByMe'] as bool? ?? false,
         completedAt: json['completedAt'] == null ? null : DateTime.parse(json['completedAt'] as String),
+        mentionsMe: json['mentionsMe'] as bool? ?? false,
       );
 }
 
