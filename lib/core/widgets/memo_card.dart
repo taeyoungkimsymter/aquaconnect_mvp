@@ -22,9 +22,11 @@ Future<void> toggleMemoCompleted(BuildContext context, WidgetRef ref, Memo memo)
     await repo.setCompleted(memo.id, completing);
     if (context.mounted && completing) {
       ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
+        ..clearSnackBars()
         ..showSnackBar(SnackBar(
           content: const Text('완료 처리했어요'),
+          duration: const Duration(seconds: 3),
+          persist: false, // action이 있으면 기본적으로 사라지지 않음
           action: SnackBarAction(label: '되돌리기', onPressed: () => repo.setCompleted(memo.id, false)),
         ));
     }
