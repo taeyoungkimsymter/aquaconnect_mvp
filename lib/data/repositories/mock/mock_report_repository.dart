@@ -18,6 +18,7 @@ class MockReportRepository implements ReportRepository {
   final OceanService _oceanService;
 
   final Map<String, Report> _latestByFarm = {};
+  final Map<String, List<Report>> _historyByFarm = {};
 
   @override
   Future<Report?> getLatestReport(String farmId) async {
@@ -51,7 +52,14 @@ class MockReportRepository implements ReportRepository {
       now: DateTime.now(),
     );
     _latestByFarm[farmId] = report;
+    _historyByFarm.putIfAbsent(farmId, () => []).insert(0, report);
     return report;
+  }
+
+  @override
+  Future<List<Report>> listReports(String farmId) async {
+    await getLatestReport(farmId); // 한 번도 안 만들어졌다면 첫 리포트를 만든다
+    return List.unmodifiable(_historyByFarm[farmId] ?? const <Report>[]);
   }
 
   @override

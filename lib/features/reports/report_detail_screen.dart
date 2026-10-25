@@ -16,6 +16,7 @@ import '../../data/models/farm.dart';
 import '../../data/models/memo.dart';
 import '../../data/models/ocean_reading.dart';
 import '../../data/models/report.dart';
+import 'report_history_section.dart';
 import 'share_link_sheet.dart';
 
 class ReportDetailScreen extends ConsumerWidget {
@@ -266,12 +267,15 @@ class _Body extends ConsumerWidget {
           ),
         ],
         const SizedBox(height: 16),
+        ReportHistorySection(farmId: farm.id),
+        const SizedBox(height: 16),
         Align(
           alignment: Alignment.center,
           child: TextButton(
             onPressed: () async {
               await ref.read(reportRepositoryProvider).generateReport(farm.id);
               ref.invalidate(reportProvider(farm.id));
+              ref.invalidate(reportHistoryProvider(farm.id));
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('리포트를 새로 생성했습니다.')));
               }

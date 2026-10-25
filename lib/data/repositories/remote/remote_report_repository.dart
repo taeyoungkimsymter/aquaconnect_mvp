@@ -19,6 +19,12 @@ class RemoteReportRepository implements ReportRepository {
   }
 
   @override
+  Future<List<Report>> listReports(String farmId) async {
+    final json = await _api.get('/api/reports/$farmId/history') as List<dynamic>;
+    return json.map((e) => Report.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  @override
   Future<Report> generateReport(String farmId) async {
     final json = await _api.post('/api/reports/$farmId/generate') as Map<String, dynamic>;
     return Report.fromJson(json);

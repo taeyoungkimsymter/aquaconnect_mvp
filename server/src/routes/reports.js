@@ -73,6 +73,18 @@ reportsRouter.get('/', async (req, res) => {
   res.json(reports);
 });
 
+// 이전에 발행된(생성된) 리포트 기록, 최신순.
+reportsRouter.get('/:farmId/history', async (req, res) => {
+  const orgId = await orgIdForMember(req.memberId);
+  const farm = await loadFarm(orgId, req.params.farmId);
+  if (!farm) return res.status(404).json({ error: '양식장을 찾을 수 없습니다.' });
+  const { rows } = await query(
+    'select * from reports where farm_id = $1 order by generated_at desc limit 50',
+    [farm.id],
+  );
+  res.json(rows.map(toReportJson));
+});
+
 reportsRouter.get('/:farmId', async (req, res) => {
   const orgId = await orgIdForMember(req.memberId);
   const farm = await loadFarm(orgId, req.params.farmId);

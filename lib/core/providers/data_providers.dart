@@ -67,6 +67,11 @@ final reportProvider = FutureProvider.family<Report?, String>((ref, farmId) {
   return ref.watch(reportRepositoryProvider).getLatestReport(farmId);
 });
 
+/// 양식장의 이전 리포트 기록(최신순). 리포트를 새로 만들면 invalidate 한다.
+final reportHistoryProvider = FutureProvider.family<List<Report>, String>((ref, farmId) {
+  return ref.watch(reportRepositoryProvider).listReports(farmId);
+});
+
 final allReportsProvider = FutureProvider<List<Report>>((ref) async {
   final farms = await ref.watch(farmsProvider.future);
   return ref.watch(reportRepositoryProvider).listLatestReports(farmIds: farms.map((f) => f.id).toList());
