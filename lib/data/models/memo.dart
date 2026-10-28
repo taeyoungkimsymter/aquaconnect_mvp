@@ -46,8 +46,10 @@ class Memo {
     this.commentCount = 0,
     this.readCount = 0,
     this.readByMe = false,
-    this.completedAt,
-    this.mentionsMe = false,
+    this.mentionedMe = false,
+    this.doneAt,
+    this.doneByMemberId,
+    this.doneByName,
   });
 
   final String id;
@@ -88,20 +90,43 @@ class Memo {
   /// Whether the signed-in member has seen it (reported via markRead).
   final bool readByMe;
 
-  /// When it was checked off (완료); null while still open. Any memo can be completed.
-  final DateTime? completedAt;
+  /// A 댓글 on it calls (호출) the signed-in member.
+  final bool mentionedMe;
 
-  bool get isCompleted => completedAt != null;
+  /// 완료: when the task was marked done, and by whom (null = open).
+  final DateTime? doneAt;
+  final String? doneByMemberId;
+  final String? doneByName;
 
-  /// A 댓글 on this memo called the signed-in member (@이름).
-  final bool mentionsMe;
-
-  /// A 할일 memo — the tag, or a "할일:" line in the text.
-  bool get isTask => tags.contains('할일') || content.contains('할일:');
+  bool get isDone => doneAt != null;
 
   String get farmLabel => farmName ?? '미지정';
 
-  Memo copyWith({String? content, List<MemoEdit>? edits, int? commentCount, bool? readByMe, bool? completed, bool? mentionsMe}) => Memo(
+  /// The 담당자 picked in the composer ('담당:<이름>' tag), if any.
+  String? get assigneeName {
+    for (final t in tags) {
+      if (t.startsWith('담당:')) return t.substring(3);
+    }
+    return null;
+  }
+
+  /// A 할일 (tag or '할일:' in the text) or a memo with a 담당자 — something
+  /// to get done, so it can be marked 완료.
+  bool get isTask => tags.contains('할일') || content.contains('할일:') || assigneeName != null;
+
+  /// Counts toward this member's 오늘의 업무: open, and it calls them (@),
+  /// is assigned to them, or is an unassigned 할일 they wrote. Must match
+  /// memberOpenTasks in server/src/lib/digest.js.
+  bool isOpenTaskFor({required String memberId, required String memberName}) {
+    if (isDone) return false;
+    if (mentionedMe) return true;
+    final assignee = assigneeName;
+    if (assignee != null) return assignee == memberName;
+    final isTodo = tags.contains('할일') || content.contains('할일:');
+    return isTodo && authorMemberId == memberId;
+  }
+
+  Memo copyWith({String? content, List<MemoEdit>? edits, int? commentCount, bool? readByMe}) => Memo(
         id: id,
         orgId: orgId,
         farmId: farmId,
@@ -120,8 +145,36 @@ class Memo {
         commentCount: commentCount ?? this.commentCount,
         readCount: readCount,
         readByMe: readByMe ?? this.readByMe,
-        completedAt: completed == null ? completedAt : (completed ? (completedAt ?? DateTime.now()) : null),
-        mentionsMe: mentionsMe ?? this.mentionsMe,
+        mentionedMe: mentionedMe,
+        doneAt: doneAt,
+        doneByMemberId: doneByMemberId,
+        doneByName: doneByName,
+      );
+
+  /// This memo marked done by [by] at [at], or reopened when [at] is null.
+  Memo withDone(DateTime? at, {String? byId, String? byName}) => Memo(
+        id: id,
+        orgId: orgId,
+        farmId: farmId,
+        farmName: farmName,
+        authorType: authorType,
+        authorName: authorName,
+        content: content,
+        tags: tags,
+        createdAt: createdAt,
+        photoCount: photoCount,
+        photoIds: photoIds,
+        readByFarm: readByFarm,
+        editCount: editCount,
+        edits: edits,
+        authorMemberId: authorMemberId,
+        commentCount: commentCount,
+        readCount: readCount,
+        readByMe: readByMe,
+        mentionedMe: mentionedMe,
+        doneAt: at,
+        doneByMemberId: at == null ? null : byId,
+        doneByName: at == null ? null : byName,
       );
 
   factory Memo.fromJson(Map<String, dynamic> json) => Memo(
@@ -145,8 +198,10 @@ class Memo {
         commentCount: json['commentCount'] as int? ?? 0,
         readCount: json['readCount'] as int? ?? 0,
         readByMe: json['readByMe'] as bool? ?? false,
-        completedAt: json['completedAt'] == null ? null : DateTime.parse(json['completedAt'] as String),
-        mentionsMe: json['mentionsMe'] as bool? ?? false,
+        mentionedMe: json['mentionedMe'] as bool? ?? false,
+        doneAt: json['doneAt'] == null ? null : DateTime.parse(json['doneAt'] as String),
+        doneByMemberId: json['doneByMemberId'] as String?,
+        doneByName: json['doneByName'] as String?,
       );
 }
 

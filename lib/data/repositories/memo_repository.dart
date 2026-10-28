@@ -8,10 +8,6 @@ abstract class MemoRepository {
   /// null returns every memo across the org.
   Stream<List<Memo>> watchMemos({String? farmId});
 
-  /// One memo by its id, or null when it no longer exists (deleted) or isn't
-  /// visible to the signed-in member. Network failures throw.
-  Future<Memo?> getMemo(String id);
-
   Future<Memo> addMemo({
     String? farmId,
     String? farmName,
@@ -24,8 +20,8 @@ abstract class MemoRepository {
   /// edit by the signed-in member. Only its author or an owner/director may.
   Future<Memo> updateMemo({required String id, required String content});
 
-  /// Checks a memo off ([completed] true) or reopens it. Any member can.
-  Future<Memo> setCompleted(String id, bool completed);
+  /// 완료 / 완료 취소 — any member may.
+  Future<Memo> setMemoDone({required String id, required bool done});
 
   /// Deletes a memo (and its photos).
   Future<void> deleteMemo(String id);
@@ -39,21 +35,17 @@ abstract class MemoRepository {
   /// A memo's 댓글, oldest first.
   Future<List<MemoComment>> listComments(String memoId);
 
-  /// [content] may be empty when [attachments] (사진·파일) are given. [mentionedMemberIds]
-  /// are the members called with "@이름" — they get their own notification.
+  /// [content] may be empty when [attachments] or [mentions] are given.
+  /// [mentions] are called in (호출) and always get a notification.
   Future<MemoComment> addComment({
     required String memoId,
     required String content,
-    List<String> mentionedMemberIds,
-    List<CommentAttachmentUpload> attachments,
+    List<CommentMention> mentions = const [],
+    List<CommentAttachmentUpload> attachments = const [],
   });
 
-  /// Bytes of one of a comment's attachments.
-  Future<Uint8List> loadCommentAttachment({
-    required String memoId,
-    required String commentId,
-    required String attachmentId,
-  });
+  /// Bytes of one of a comment's [MemoComment.attachments].
+  Future<Uint8List> loadCommentAttachment(String attachmentId);
 
   /// Only the comment's author or an owner/director may.
   Future<void> deleteComment({required String memoId, required String commentId});

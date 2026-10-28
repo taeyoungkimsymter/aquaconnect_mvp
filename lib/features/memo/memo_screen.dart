@@ -1,49 +1,90 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/providers/data_providers.dart';
-import '../../core/providers/memo_view_provider.dart';
+import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/korean_search.dart';
 import '../../core/widgets/chips.dart';
+import '../../core/widgets/farm_search_field.dart';
 import '../../core/widgets/memo_card.dart';
 import '../../core/widgets/memo_composer_bar.dart';
 import '../../data/models/farm.dart';
-import '../../data/logic/memo_filter.dart';
 import '../../data/models/memo.dart';
 
 class MemoScreen extends ConsumerStatefulWidget {
-  const MemoScreen({super.key});
+  const MemoScreen({super.key, this.focusMemoId, this.openComments = false, this.view});
+
+  /// Memo to pin at the top, from a tapped memo/comment notification.
+  final String? focusMemoId;
+
+  /// Also open [focusMemoId]'s 댓글 sheet (a comment notification).
+  final bool openComments;
+
+  /// `?view=today`: open on 오늘의 업무 (from the daily notification).
+  final String? view;
 
   @override
   ConsumerState<MemoScreen> createState() => _MemoScreenState();
 }
 
+/// Memo tab categories (the chips); the farm is picked separately.
+enum _MemoView { all, today, todo, mentioned, done }
+
+/// Farm filter: every farm, memos without a farm, or one farm id.
+const _allFarms = '';
+const _noFarm = '미지정';
 
 class _MemoScreenState extends ConsumerState<MemoScreen> {
-  MemoTab _tab = MemoTab.all;
-  MemoTaskStatus _status = MemoTaskStatus.open;
-  bool _mentionOnly = false;
-
-  /// '전체', '미지정', or a farm id.
-  String _farm = memoAllFarms;
+  _MemoView _view = _MemoView.all;
+  String _farm = _allFarms;
   bool _searching = false;
   String _query = '';
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
 
-  /// 홈에서 눌러 들어온 업무 — 목록에서 찾아 스크롤하고 잠시 강조한다.
   String? _focusId;
-  final _focusKey = GlobalKey();
+  bool _commentsPending = false;
 
   @override
   void initState() {
     super.initState();
-    // 메모 탭이 처음 열리는 순간에 이미 요청이 와 있을 수 있다.
+    _takeFocus();
+  }
+
+  @override
+  void didUpdateWidget(MemoScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focusMemoId != oldWidget.focusMemoId || widget.view != oldWidget.view) _takeFocus();
+  }
+
+  /// Picks up `?memo=` / `?view=` from the route, then clears it from the
+  /// location so the same notification tapped again (or the 메모 tab
+  /// restoring its last location) is seen as a fresh request.
+  void _takeFocus() {
+    final id = widget.focusMemoId;
+    if (id == null && widget.view == null) return;
+    if (id != null) {
+      _focusId = id;
+      _commentsPending = widget.openComments;
+    }
+    _view = widget.view == 'today' ? _MemoView.today : _MemoView.all;
+    _farm = _allFarms;
+    _searching = false;
+    _query = '';
+    _searchController.clear();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _applyRequest(ref.read(memoViewRequestProvider));
+      if (mounted) context.go('/memo');
+    });
+  }
+
+  /// Opens the pending 댓글 sheet once the focused memo is in the list.
+  void _openPendingComments(Memo memo) {
+    _commentsPending = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) MemoCard(memo: memo).showComments(context);
     });
   }
 
@@ -52,41 +93,6 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
-  }
-
-  void _applyRequest(MemoViewRequest? request) {
-    if (request == null) return;
-    ref.read(memoViewRequestProvider.notifier).state = null;
-    _searchController.clear();
-    _searchFocus.unfocus();
-    setState(() {
-      _searching = false;
-      _query = '';
-      _farm = memoAllFarms;
-      _mentionOnly = false;
-      _status = MemoTaskStatus.open;
-      _tab = request.tasksOnly ? MemoTab.task : MemoTab.all;
-      _focusId = request.focusMemoId;
-    });
-    if (_focusId == null) return;
-    // 목록이 지연 생성이라 대상이 화면 밖이면 context가 없다 — 다음 프레임에 다시 시도.
-    var tries = 0;
-    void reveal() {
-      if (!mounted || _focusId == null) return;
-      final ctx = _focusKey.currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 350), alignment: 0.15, curve: Curves.easeOut);
-        Future.delayed(const Duration(milliseconds: 2200), () {
-          if (mounted) setState(() => _focusId = null);
-        });
-      } else if (++tries < 20) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => reveal());
-      } else {
-        setState(() => _focusId = null);
-      }
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => reveal());
   }
 
   void _openSearch() {
@@ -105,9 +111,9 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<MemoViewRequest?>(memoViewRequestProvider, (_, next) => _applyRequest(next));
     final farmsAsync = ref.watch(farmsProvider);
     final memosAsync = ref.watch(memosProvider(null));
+    final me = ref.watch(authStateProvider).valueOrNull?.member;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -132,9 +138,15 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                     )
                   else
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('메모', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+                        const Spacer(),
+                        _FarmPickerButton(
+                          farms: farmsAsync.valueOrNull ?? const [],
+                          selected: _farm,
+                          onSelected: (farm) => setState(() => _farm = farm),
+                        ),
+                        const SizedBox(width: 4),
                         IconButton(
                           tooltip: '메모 검색',
                           onPressed: _openSearch,
@@ -145,85 +157,118 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                       ],
                     ),
                   const SizedBox(height: 12),
-                  // 주 탭 — 세 개를 균등 분할해 좁은 화면에서도 잘리지 않게.
                   Row(
                     children: [
-                      for (final (tab, label) in const [(MemoTab.all, '전체'), (MemoTab.log, '업무 기록'), (MemoTab.task, '할 일')]) ...[
-                        if (tab != MemoTab.all) const SizedBox(width: 6),
-                        Expanded(child: _TabPill(label: label, selected: _tab == tab, onTap: () => setState(() => _tab = tab))),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    switch (_tab) {
-                      MemoTab.all => "업무 기록과 남은 할 일을 모아 봐요. 끝낸 할 일은 할 일 탭의 '완료'에서 볼 수 있어요.",
-                      MemoTab.log => '할 일이 아닌 일반 메모예요. 방문·폐사·접종 같은 현장 기록이 여기에 있어요.',
-                      MemoTab.task => "'할일' 태그나 '할일:' 줄이 있는 메모예요. 완료할 때까지 홈의 업무 현황에 남아요.",
-                    },
-                    style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted, height: 1.35),
-                  ),
-                  if (_tab == MemoTab.task) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        for (final (st, label) in const [(MemoTaskStatus.open, '미완료'), (MemoTaskStatus.done, '완료'), (MemoTaskStatus.any, '상태 전체')]) ...[
-                          if (st != MemoTaskStatus.open) const SizedBox(width: 6),
-                          Expanded(child: _TabPill(label: label, selected: _status == st, onTap: () => setState(() => _status = st), small: true)),
-                        ],
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      FilterPillChip(label: '@ 나를 언급', selected: _mentionOnly, onTap: () => setState(() => _mentionOnly = !_mentionOnly)),
-                      // One chip instead of a chip per farm (the row used to grow
-                      // without end): it opens a scrollable list to pick from.
-                      FilterPillChip(
-                        label: '${_selectedFarmName(farmsAsync.valueOrNull ?? const []) ?? '양식장'} ▾',
-                        selected: _farm != memoAllFarms,
-                        onTap: () => _pickFarm(farmsAsync.valueOrNull ?? const []),
+                      Expanded(
+                        child: SizedBox(
+                          height: 30,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            children: [
+                              for (final (view, label) in const [
+                                (_MemoView.all, '전체'),
+                                (_MemoView.today, '오늘의 업무'),
+                                (_MemoView.todo, '할일'),
+                                (_MemoView.mentioned, '나를 호출'),
+                                (_MemoView.done, '완료'),
+                              ]) ...[
+                                FilterPillChip(label: label, selected: _view == view, onTap: () => setState(() => _view = view)),
+                                const SizedBox(width: 6),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
+                      // The search field takes the title row, so the farm
+                      // filter (still applied to the results) shows here.
+                      if (_searching) ...[
+                        const SizedBox(width: 4),
+                        _FarmPickerButton(
+                          farms: farmsAsync.valueOrNull ?? const [],
+                          selected: _farm,
+                          onSelected: (farm) => setState(() => _farm = farm),
+                        ),
+                      ],
                     ],
                   ),
                 ],
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(22, 12, 20, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('업무 내용', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-              ),
-            ),
             Expanded(
               child: memosAsync.when(
                 data: (memos) {
-                  final filtered = _applyFilter(memos);
+                  // Not found (yet, or deleted): just the normal list.
+                  final focused = memos.where((m) => m.id == _focusId).firstOrNull;
+                  if (focused != null && _commentsPending) _openPendingComments(focused);
+                  bool isMine(Memo m) => me != null && m.isOpenTaskFor(memberId: me.id, memberName: me.name);
+                  final filtered = _applyFilter(memos, isMine).where((m) => m.id != focused?.id).toList();
                   final groups = _groupByDay(filtered);
-                  if (filtered.isEmpty) {
+                  final showToday = _query.trim().isEmpty && me != null;
+                  if (filtered.isEmpty && focused == null && !showToday) {
                     return Center(
                       child: Text(
-                        _query.trim().isEmpty ? '해당하는 내용이 없어요.' : "'${_query.trim()}'에 해당하는 메모가 없습니다.",
+                        _emptyMessage(),
+                        textAlign: TextAlign.center,
                         style: const TextStyle(color: AppColors.textMuted),
                       ),
                     );
                   }
                   return ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                    // 강조할 업무가 아직 화면 밖이어도 위젯이 만들어져 있어야 스크롤할 수 있다.
-                    scrollCacheExtent: _focusId != null ? const ScrollCacheExtent.pixels(100000) : null,
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(2, 0, 2, 4),
-                        child: Text(
-                          _query.trim().isNotEmpty ? '검색 결과 ${filtered.length}건' : '${filtered.length}건',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand),
+                      if (showToday) ...[
+                        _TodayCard(
+                          open: memos.where(isMine).toList(),
+                          doneToday: memos.where((m) => m.isDone && m.doneByMemberId == me.id && _isToday(m.doneAt!)).length,
+                          selected: _view == _MemoView.today,
+                          onTap: () => setState(() => _view = _view == _MemoView.today ? _MemoView.all : _MemoView.today),
                         ),
-                      ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (filtered.isEmpty && focused == null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 32),
+                          child: Text(
+                            _emptyMessage(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppColors.textMuted, height: 1.5),
+                          ),
+                        ),
+
+                      if (focused != null) ...[
+                        Row(
+                          children: [
+                            const Icon(Icons.notifications_active_outlined, size: 14, color: AppColors.brand),
+                            const SizedBox(width: 4),
+                            const Expanded(
+                              child: Text('알림에서 연 메모',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand)),
+                            ),
+                            IconButton(
+                              tooltip: '닫기',
+                              onPressed: () => setState(() => _focusId = null),
+                              icon: const Icon(Icons.close, size: 16, color: AppColors.textMuted),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.brandTintBorder, width: 2),
+                          ),
+                          child: MemoCard(memo: focused),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      if (_query.trim().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(2, 0, 2, 4),
+                          child: Text('검색 결과 ${filtered.length}건',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand)),
+                        ),
                       for (final entry in groups.entries) ...[
                         Padding(
                           padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
@@ -232,11 +277,7 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                         ),
                         const SizedBox(height: 8),
                         for (final memo in entry.value) ...[
-                          _Highlight(
-                            key: memo.id == _focusId ? _focusKey : ValueKey(memo.id),
-                            on: memo.id == _focusId,
-                            child: MemoCard(memo: memo, onTap: () => context.push('/memos/${memo.id}')),
-                          ),
+                          MemoCard(memo: memo),
                           const SizedBox(height: 10),
                         ],
                       ],
@@ -257,85 +298,53 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
     );
   }
 
-  /// Name of the farm currently filtered on, or null when the filter is not a farm.
-  String? _selectedFarmName(List<Farm> farms) {
-    if (_farm == memoNoFarm) return memoNoFarm;
-    for (final f in farms) {
-      if (f.id == _farm) return f.name;
-    }
-    return null;
+  List<Memo> _applyFilter(List<Memo> memos, bool Function(Memo) isMine) {
+    final byView = switch (_view) {
+      _MemoView.all => memos,
+      _MemoView.today => memos.where(isMine).toList(),
+      _MemoView.todo => memos.where((m) => m.isTask && !m.isDone).toList(),
+      _MemoView.mentioned => memos.where((m) => m.mentionedMe).toList(),
+      _MemoView.done => memos.where((m) => m.isDone).toList(),
+    };
+    final byFarm = switch (_farm) {
+      _allFarms => byView,
+      _noFarm => byView.where((m) => m.farmId == null).toList(),
+      _ => byView.where((m) => m.farmId == _farm).toList(),
+    };
+    return byFarm.where(_matchesQuery).toList();
   }
 
-  Future<void> _pickFarm(List<Farm> farms) async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (sheetContext) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
-                child: Text('양식장 선택', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-              ),
-              Flexible(
-                child: farms.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 32),
-                        child: Center(child: Text('등록된 양식장이 없어요.', style: TextStyle(color: AppColors.textMuted))),
-                      )
-                    : ListView(
-                        shrinkWrap: true,
-                        children: [
-                          ListTile(
-                            dense: true,
-                            title: const Text('전체 양식장'),
-                            trailing: _farm == memoAllFarms ? const Icon(Icons.check, size: 18, color: AppColors.brand) : null,
-                            onTap: () => Navigator.of(sheetContext).pop(memoAllFarms),
-                          ),
-                          ListTile(
-                            dense: true,
-                            title: const Text(memoNoFarm),
-                            trailing: _farm == memoNoFarm ? const Icon(Icons.check, size: 18, color: AppColors.brand) : null,
-                            onTap: () => Navigator.of(sheetContext).pop(memoNoFarm),
-                          ),
-                          for (final farm in farms)
-                            ListTile(
-                              dense: true,
-                              title: Text(farm.name),
-                              trailing: _farm == farm.id ? const Icon(Icons.check, size: 18, color: AppColors.brand) : null,
-                              onTap: () => Navigator.of(sheetContext).pop(farm.id),
-                            ),
-                        ],
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (picked != null && mounted) setState(() => _farm = picked);
+  String _emptyMessage() {
+    if (_query.trim().isNotEmpty) return "'${_query.trim()}'에 해당하는 메모가 없습니다.";
+    return switch (_view) {
+      _MemoView.today => '오늘 남은 업무가 없어요.\n할일·담당자를 지정하거나 호출받은 메모가 여기에 모여요.',
+      _MemoView.todo => '남은 할일이 없어요.',
+      _MemoView.mentioned => '나를 호출한 메모가 없어요.',
+      _MemoView.done => '완료한 메모가 없어요.',
+      _MemoView.all => '아직 메모가 없습니다.',
+    };
   }
 
-  List<Memo> _applyFilter(List<Memo> memos) => filterMemos(
-        memos,
-        tab: _tab,
-        status: _status,
-        mentionOnly: _mentionOnly,
-        farm: _farm,
-        query: _query,
-      );
+  static bool _isToday(DateTime at) {
+    final local = at.toLocal();
+    final now = DateTime.now();
+    return local.year == now.year && local.month == now.month && local.day == now.day;
+  }
+
+  /// Every whitespace-separated word must appear somewhere in the memo's
+  /// content, tags, farm name or author (case-insensitive).
+  bool _matchesQuery(Memo memo) {
+    final words = _query.trim().toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    if (words.isEmpty) return true;
+    final haystack = [memo.content, ...memo.tags, memo.farmLabel, memo.authorName].join(' ').toLowerCase();
+    return words.every(haystack.contains);
+  }
 
   Map<String, List<Memo>> _groupByDay(List<Memo> memos) {
     final formatter = DateFormat('M월 d일 EEEE', 'ko_KR');
     final map = <String, List<Memo>>{};
     for (final memo in memos) {
-      final label = _safeFormat(formatter, memo.createdAt);
+      final label = _safeFormat(formatter, memo.createdAt.toLocal());
       map.putIfAbsent(label, () => []).add(memo);
     }
     return map;
@@ -347,6 +356,238 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
     } catch (_) {
       return DateFormat('M/d').format(dt);
     }
+  }
+}
+
+/// 오늘의 업무: what's left for me today (my 할일 / 담당 / 호출), at the top
+/// of the memo tab so opening the app answers "오늘 뭐 해야 하지?". Tap to
+/// show just those memos.
+class _TodayCard extends StatelessWidget {
+  const _TodayCard({required this.open, required this.doneToday, required this.selected, required this.onTap});
+
+  final List<Memo> open;
+  final int doneToday;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final mentioned = open.where((m) => m.mentionedMe).length;
+    final total = open.length + doneToday;
+    String dateLabel;
+    try {
+      dateLabel = DateFormat('M/d (E)', 'ko_KR').format(DateTime.now());
+    } catch (_) {
+      dateLabel = DateFormat('M/d').format(DateTime.now());
+    }
+    return Material(
+      color: selected ? AppColors.brandTint : AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: selected ? AppColors.brand : AppColors.brandTintBorder, width: selected ? 1.5 : 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.checklist_rtl, size: 18, color: AppColors.brand),
+                  const SizedBox(width: 6),
+                  const Text('오늘의 업무', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(dateLabel,
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+                  ),
+                  const Spacer(),
+                  Text(selected ? '전체 보기' : '모아 보기',
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.brand)),
+                  const Icon(Icons.chevron_right, size: 16, color: AppColors.brand),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _TodayStat(label: '남은 업무', value: open.length, color: open.isEmpty ? AppColors.textMuted : AppColors.brand),
+                  _TodayStat(label: '나를 호출', value: mentioned, color: mentioned == 0 ? AppColors.textMuted : AppColors.warningDark),
+                  _TodayStat(label: '오늘 완료', value: doneToday, color: doneToday == 0 ? AppColors.textMuted : AppColors.good),
+                ],
+              ),
+              if (total > 0) ...[
+                const SizedBox(height: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: doneToday / total,
+                    minHeight: 6,
+                    backgroundColor: AppColors.neutralChip,
+                    color: AppColors.good,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  open.isEmpty ? '오늘 업무를 모두 끝냈어요!' : '메모 왼쪽 동그라미(✓)를 누르면 완료돼서 여기서 빠져요.',
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                ),
+              ] else ...[
+                const SizedBox(height: 8),
+                const Text('할일 태그·담당자를 지정하거나 댓글로 호출받은 메모가 여기에 모여요.',
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TodayStat extends StatelessWidget {
+  const _TodayStat({required this.label, required this.value, required this.color});
+
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$value', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: color)),
+          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+}
+
+/// "양식장 ▾" chip: opens a scrollable list (양식장 전체 / 미지정 / each farm)
+/// instead of one chip per farm in the header.
+class _FarmPickerButton extends StatelessWidget {
+  const _FarmPickerButton({required this.farms, required this.selected, required this.onSelected});
+
+  final List<Farm> farms;
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  String get _label {
+    if (selected == _allFarms) return '양식장 전체';
+    if (selected == _noFarm) return '미지정';
+    return farms.where((f) => f.id == selected).firstOrNull?.name ?? '양식장 전체';
+  }
+
+  Future<void> _open(BuildContext context) async {
+    var query = '';
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final searching = query.trim().isNotEmpty;
+          final options = [
+            if (!searching) ...[(_allFarms, '양식장 전체', null), (_noFarm, '미지정', null)],
+            for (final f in searchFarms(farms, query)) (f.id, f.name, f.address),
+          ];
+          return Padding(
+            // Keep the list above the on-screen keyboard while typing.
+            padding: EdgeInsets.only(bottom: MediaQuery.of(sheetContext).viewInsets.bottom),
+            child: SafeArea(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.7),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+                      child: Text('양식장 선택', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                      child: FarmSearchField(
+                        fillColor: AppColors.background,
+                        onChanged: (q) => setSheetState(() => query = q),
+                      ),
+                    ),
+                    if (searching && options.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(20, 16, 20, 24),
+                        child: Text('맞는 양식장이 없어요', style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
+                      ),
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final (value, label, address) in options)
+                            ListTile(
+                              dense: true,
+                              subtitle: address == null || address.isEmpty
+                                  ? null
+                                  : Text(address,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+                              title: Text(label,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: value == selected ? FontWeight.w800 : FontWeight.w500,
+                                    color: value == selected ? AppColors.brand : AppColors.textPrimary,
+                                  )),
+                              trailing: value == selected ? const Icon(Icons.check, size: 18, color: AppColors.brand) : null,
+                              onTap: () => Navigator.of(sheetContext).pop(value),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (picked != null) onSelected(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = selected != _allFarms;
+    return GestureDetector(
+      onTap: () => _open(context),
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.only(left: 10, right: 6),
+        decoration: BoxDecoration(
+          color: active ? AppColors.brandTint : AppColors.surface,
+          border: Border.all(color: active ? AppColors.brand : AppColors.border),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 96),
+              child: Text(_label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: active ? AppColors.brand : AppColors.textSecondary)),
+            ),
+            Icon(Icons.expand_more, size: 16, color: active ? AppColors.brand : AppColors.textSecondary),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -405,71 +646,6 @@ class _SearchField extends StatelessWidget {
           child: const Text('취소', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
         ),
       ],
-    );
-  }
-}
-
-class _TabPill extends StatelessWidget {
-  const _TabPill({required this.label, required this.selected, required this.onTap, this.small = false});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  final bool small;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: selected,
-      excludeSemantics: true,
-      label: label,
-      onTap: onTap,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          height: small ? 32 : 38,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? (small ? AppColors.brandTint : AppColors.brand) : AppColors.surface,
-            border: Border.all(color: selected ? (small ? AppColors.brand : Colors.transparent) : AppColors.border),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: small ? 12 : 13,
-              fontWeight: FontWeight.w700,
-              color: selected ? (small ? AppColors.brand : Colors.white) : AppColors.textSecondary,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 홈에서 눌러 들어온 업무를 잠시 강조한다.
-class _Highlight extends StatelessWidget {
-  const _Highlight({super.key, required this.on, required this.child});
-
-  final bool on;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      padding: on ? const EdgeInsets.all(3) : EdgeInsets.zero,
-      decoration: BoxDecoration(
-        color: on ? AppColors.brandTint : Colors.transparent,
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: on ? AppColors.brand : Colors.transparent, width: 1.5),
-      ),
-      child: child,
     );
   }
 }

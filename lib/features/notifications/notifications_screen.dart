@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers/notification_providers.dart';
 import '../../core/providers/repository_providers.dart';
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/app_notification.dart';
 import 'push_status_card.dart';
@@ -20,26 +21,8 @@ class NotificationsScreen extends ConsumerWidget {
       } catch (_) {}
       ref.invalidate(notificationFeedProvider);
     }
-    if (!context.mounted) return;
     final link = n.link;
-    // Memo notifications made before memos had ids in the link point at the
-    // bare '/memo' tab; which memo they meant can't be recovered safely, so
-    // say so rather than opening an empty/other memo.
-    if ((n.type == 'memo' || n.type == 'comment') && (link == null || !link.startsWith('/memos/'))) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('이전 버전에서 온 알림이라 원본 메모를 찾을 수 없어요. 메모 탭에서 확인해 주세요.')));
-      return;
-    }
-    if (link == null || link == '/notifications') return;
-    // Tab routes live inside the bottom-nav shell, so switch to them rather
-    // than pushing them on top of this screen (which renders blank).
-    const tabs = {'/', '/memo', '/info', '/mypage'};
-    if (tabs.contains(link)) {
-      context.go(link);
-    } else {
-      context.push(link);
-    }
+    if (link != null && link != '/notifications' && context.mounted) openAppLink(GoRouter.of(context), link);
   }
 
   Future<void> _markAllRead(BuildContext context, WidgetRef ref) async {
@@ -139,6 +122,7 @@ class _NotificationTile extends StatelessWidget {
       'memo' => (Icons.edit_note, AppColors.brand),
       'inquiry' => (Icons.chat_bubble_outline, AppColors.good),
       'comment' => (Icons.mode_comment_outlined, AppColors.brand),
+      'mention' => (Icons.alternate_email, AppColors.warning),
       'digest' => (Icons.summarize_outlined, AppColors.brand),
       _ => (Icons.notifications_outlined, AppColors.textSecondary),
     };

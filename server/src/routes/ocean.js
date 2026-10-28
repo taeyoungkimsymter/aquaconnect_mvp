@@ -1,7 +1,7 @@
 import { Router } from 'express';
 
-import { fetchNearestWaterQuality } from '../lib/femo.js';
 import { fetchRealtimeObservations } from '../lib/nifs.js';
+import { fetchRedTide } from '../lib/redtide.js';
 
 export const oceanRouter = Router();
 
@@ -16,21 +16,11 @@ oceanRouter.get('/realtime', async (req, res) => {
   }
 });
 
-// Latest NIFS 어장환경 survey (salinity, DO, pH, nutrients, ...) at the
-// survey point nearest to lat/lon. `refresh=1` bypasses the server cache.
-oceanRouter.get('/quality', async (req, res) => {
-  const latitude = Number(req.query.lat);
-  const longitude = Number(req.query.lon);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return res.status(400).json({ error: 'lat, lon 쿼리 파라미터가 필요합니다.' });
-  }
+// Newest NIFS 적조 속보 (with its detail text) and the recent ones.
+// `refresh=1` bypasses the server cache.
+oceanRouter.get('/redtide', async (req, res) => {
   try {
-    const quality = await fetchNearestWaterQuality({
-      latitude,
-      longitude,
-      refresh: req.query.refresh === '1' || req.query.refresh === 'true',
-    });
-    res.json(quality);
+    res.json(await fetchRedTide({ refresh: req.query.refresh === '1' || req.query.refresh === 'true' }));
   } catch (err) {
     res.status(502).json({ error: err.message });
   }

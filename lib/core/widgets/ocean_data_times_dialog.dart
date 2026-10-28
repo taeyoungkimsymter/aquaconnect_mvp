@@ -3,12 +3,13 @@ import 'package:intl/intl.dart';
 
 import '../theme/app_colors.dart';
 import '../../data/models/ocean_reading.dart';
+import '../../data/models/red_tide.dart';
 
-/// Shows when each part of [snapshot] was measured: the realtime water
-/// temperature and the (much less frequent) 어장환경 survey values.
-Future<void> showOceanDataTimesDialog(BuildContext context, OceanSnapshot snapshot) {
+/// Shows when each part of the 해양환경 data was measured: the realtime water
+/// temperature of [snapshot] and the newest 적조 속보 in [redTide].
+Future<void> showOceanDataTimesDialog(BuildContext context, OceanSnapshot snapshot, {RedTideInfo? redTide}) {
   final format = DateFormat('yyyy.MM.dd HH:mm');
-  final quality = snapshot.waterQuality;
+  final latestTide = redTide?.latest;
   final layerLabel = oceanLayerDisplayLabel(snapshot.layer);
 
   return showDialog<void>(
@@ -26,16 +27,11 @@ Future<void> showOceanDataTimesDialog(BuildContext context, OceanSnapshot snapsh
           ),
           const SizedBox(height: 14),
           _Entry(
-            title: '염도 · 용존산소 · 수질',
-            time: quality == null ? '정보 없음' : format.format(quality.observedAt),
-            detail: quality == null
-                ? '가까운 어장환경 조사 정점이 없습니다'
-                : '${quality.pointName} (관측소에서 ${quality.distanceKm.toStringAsFixed(1)}km) · 저층 기준',
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            '수질 값은 국립수산과학원 어장환경 정기조사(연 4회 내외) 자료라 실시간 수온보다 관측 시각이 오래될 수 있어요.',
-            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+            title: '적조 속보',
+            time: latestTide == null ? '정보 없음' : DateFormat('yyyy.MM.dd').format(latestTide.reportDate),
+            detail: latestTide == null
+                ? '최근 1년간 발표된 속보가 없습니다'
+                : '국립수산과학원 적조정보 · 적조가 있는 동안 매일 발표돼요',
           ),
           if (snapshot.fetchedAt != null) ...[
             const SizedBox(height: 8),

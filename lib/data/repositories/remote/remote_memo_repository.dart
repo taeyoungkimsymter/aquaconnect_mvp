@@ -33,15 +33,20 @@ class RemoteMemoRepository implements MemoRepository {
     late final StreamController<List<Memo>> controller;
     Timer? timer;
     StreamSubscription<void>? refreshSub;
+    var hasData = false;
 
     Future<void> tick() async {
       try {
         final memos = await _fetchAll();
         if (!controller.isClosed) {
+          hasData = true;
           controller.add(farmId == null ? memos : memos.where((m) => m.farmId == farmId).toList());
         }
       } catch (e) {
-        if (!controller.isClosed) controller.addError(e);
+        // Once a list has loaded, a failed poll (app resumed from background,
+        // network switch, server restarting on deploy) keeps showing it and
+        // waits for the next tick — only a failed first load is an error.
+        if (!controller.isClosed && !hasData) controller.addError(e);
       }
     }
 
@@ -60,17 +65,6 @@ class RemoteMemoRepository implements MemoRepository {
     );
 
     return controller.stream;
-  }
-
-  @override
-  Future<Memo?> getMemo(String id) async {
-    try {
-      final json = await _api.get('/api/memos/${Uri.encodeComponent(id)}') as Map<String, dynamic>;
-      return Memo.fromJson(json);
-    } on ApiException catch (e) {
-      if (e.statusCode == 404 || e.statusCode == 403) return null;
-      rethrow;
-    }
   }
 
   @override
@@ -104,8 +98,8 @@ class RemoteMemoRepository implements MemoRepository {
   }
 
   @override
-  Future<Memo> setCompleted(String id, bool completed) async {
-    final json = await _api.put('/api/memos/$id/completion', body: {'completed': completed}) as Map<String, dynamic>;
+  Future<Memo> setMemoDone({required String id, required bool done}) async {
+    final json = await _api.put('/api/memos/$id/done', body: {'done': done}) as Map<String, dynamic>;
     _refresh.add(null);
     return Memo.fromJson(json);
   }
@@ -136,36 +130,21 @@ class RemoteMemoRepository implements MemoRepository {
   Future<MemoComment> addComment({
     required String memoId,
     required String content,
-    List<String> mentionedMemberIds = const [],
+    List<CommentMention> mentions = const [],
     List<CommentAttachmentUpload> attachments = const [],
   }) async {
-    final json = await _api.post(
-      '/api/memos/$memoId/comments',
-      body: {
-        'content': content,
-        'mentionedMemberIds': mentionedMemberIds,
-        'attachments': [
-          for (final a in attachments)
-            {
-              'kind': a.isPhoto ? 'photo' : 'file',
-              'fileName': a.fileName,
-              'contentType': a.contentType,
-              'dataBase64': base64Encode(a.bytes),
-            },
-        ],
-      },
-    ) as Map<String, dynamic>;
+    final json = await _api.post('/api/memos/$memoId/comments', body: {
+      'content': content,
+      'mentionMemberIds': [for (final m in mentions) m.memberId],
+      'attachments': [for (final a in attachments) a.toJson(base64Encode)],
+    }) as Map<String, dynamic>;
     _refresh.add(null);
     return MemoComment.fromJson(json);
   }
 
   @override
-  Future<Uint8List> loadCommentAttachment({
-    required String memoId,
-    required String commentId,
-    required String attachmentId,
-  }) =>
-      _api.getBytes('/api/memos/$memoId/comments/$commentId/attachments/$attachmentId');
+  Future<Uint8List> loadCommentAttachment(String attachmentId) =>
+      _api.getBytes('/api/memos/comment-attachments/$attachmentId');
 
   @override
   Future<void> deleteComment({required String memoId, required String commentId}) async {

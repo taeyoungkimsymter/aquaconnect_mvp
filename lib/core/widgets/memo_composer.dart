@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/korean_search.dart';
+
 import '../../data/models/farm.dart';
 import '../../data/models/memo.dart';
 import '../../data/models/org_member.dart';
@@ -76,14 +78,14 @@ class _MemoComposerState extends State<MemoComposer> {
     final query = _slashQuery;
     if (query == null) return const [];
     if (query.isEmpty) return widget.farms;
-    return widget.farms.where((f) => f.name.contains(query)).toList();
+    return searchFarms(widget.farms, query);
   }
 
   List<OrgMember> get _memberSuggestions {
     final query = _slashQuery;
     if (query == null) return const [];
     final roster = widget.members.where((m) => m.status == MemberStatus.active);
-    return query.isEmpty ? roster.toList() : roster.where((m) => m.name.contains(query)).toList();
+    return query.isEmpty ? roster.toList() : roster.where((m) => koreanMatches(m.name, query)).toList();
   }
 
   bool get _canSend =>

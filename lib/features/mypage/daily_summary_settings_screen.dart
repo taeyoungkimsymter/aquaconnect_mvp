@@ -11,11 +11,10 @@ String formatKoreanTime(TimeOfDay time) {
   return '${isPm ? '오후' : '오전'} $hour12:$minute';
 }
 
-/// "마이페이지 > 업무 알림 설정" — on/off for the 미완료된 업무 and 오늘 해야할 일
-/// notifications plus the one send time they share (default 오전 8:30). Visible
-/// to every role. It only controls *whether* and *when* they go out; the
-/// settings fields are still called daily*/weekly* from when these were the
-/// 하루/주간 요약.
+/// "마이페이지 > 오늘의 업무 알림" — on/off + time of the daily 오늘의 업무
+/// notification (my open 할일 / 담당 / 호출 + 위험 양식장), which replaced the
+/// old 하루 요약 / 주간 요약. The weekly flag is still stored server-side but
+/// no longer sends anything, so it has no toggle here.
 class DailySummarySettingsScreen extends ConsumerWidget {
   const DailySummarySettingsScreen({super.key});
 
@@ -46,7 +45,7 @@ class DailySummarySettingsScreen extends ConsumerWidget {
         backgroundColor: AppColors.surface,
         elevation: 0,
         foregroundColor: AppColors.brandDark,
-        title: const Text('업무 알림 설정', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+        title: const Text('오늘의 업무 알림', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
       ),
       body: settingsAsync.when(
         data: (settings) => ListView(
@@ -57,22 +56,15 @@ class DailySummarySettingsScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   _ToggleRow(
-                    icon: Icons.summarize_outlined,
-                    label: '미완료된 업무 받기',
+                    icon: Icons.checklist_rtl,
+                    label: '오늘의 업무 알림 받기',
                     value: settings.dailyEnabled,
                     onChanged: (v) => _save(context, ref.read(digestSettingsProvider.notifier).setDailyEnabled(v)),
                   ),
                   const Divider(height: 1, indent: 16, endIndent: 16),
-                  _ToggleRow(
-                    icon: Icons.today_outlined,
-                    label: '오늘 해야할 일 받기',
-                    value: settings.weeklyEnabled,
-                    onChanged: (v) => _save(context, ref.read(digestSettingsProvider.notifier).setWeeklyEnabled(v)),
-                  ),
-                  const Divider(height: 1, indent: 16, endIndent: 16),
                   _TimeRow(
                     time: settings.dailyTime,
-                    enabled: settings.dailyEnabled || settings.weeklyEnabled,
+                    enabled: settings.dailyEnabled,
                     onTap: () => _pickTime(context, ref, settings.dailyTime),
                   ),
                 ],
@@ -81,7 +73,8 @@ class DailySummarySettingsScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 4),
-              child: Text('정한 시각(기본 오전 8:30)에 매일 알림이 와요. 미완료된 업무는 아직 완료하지 않은 할일 메모를, 오늘 해야할 일은 내가 담당하는 양식장의 미완료 할일을 알려 드려요.',
+              child: Text('매일 정한 시각에 오늘 내가 할 일 — 남은 할일·담당 메모, 나를 호출한 메모 수와 위험·주의 양식장을 알려 드려요. '
+                  '알림을 누르면 메모 탭의 오늘의 업무로 바로 이동해요. 아침 출근 시간으로 맞춰 두면 하루를 시작하기 좋아요.',
                   style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.5)),
             ),
           ],
@@ -141,7 +134,7 @@ class _TimeRow extends StatelessWidget {
               const Icon(Icons.schedule_outlined, size: 18, color: AppColors.textSecondary),
               const SizedBox(width: 12),
               const Expanded(
-                child: Text('발송 시각', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                child: Text('알림 시각', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
               ),
               Text(formatKoreanTime(time), style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
               const SizedBox(width: 6),

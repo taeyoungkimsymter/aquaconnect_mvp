@@ -1,4 +1,5 @@
 import '../models/ocean_reading.dart';
+import '../models/red_tide.dart';
 import 'ocean_service.dart';
 
 /// Canned data for mock mode. The farm-linked '001'/'002' codes keep the
@@ -11,9 +12,6 @@ class MockOceanService implements OceanService {
     '001': const [26.6, 26.9, 27.1, 27.4, 27.6, 27.7, 27.8],
     '002': const [26.9, 27.2, 27.6, 28.0, 28.3, 28.5, 28.6],
   };
-
-  static const _salinity = {'001': 32.1, '002': 31.8};
-  static const _dissolvedOxygen = {'001': 5.2, '002': 5.0};
 
   /// The farm-linked '001'/'002' codes predate real station data and only
   /// exist in this mock world, so their displayed layer is fixed rather
@@ -83,19 +81,14 @@ class MockOceanService implements OceanService {
       final temps = _layerTemps(info);
       final layer = ['저층', '중층', '표층'].firstWhere(temps.containsKey);
       final temp = temps[layer]!;
-      final (quality, qualityStatus) = await resolveWaterQuality(fetchWaterQuality(stationCode));
       return OceanSnapshot(
         region: region,
         stationName: info.name,
         waterTemp: temp,
         layer: layer,
         observedAt: _todayNoon(),
-        salinity: quality?.value('salinity'),
-        dissolvedOxygen: quality?.value('dissolvedOxygen'),
-        waterQuality: quality,
-        waterQualityStatus: qualityStatus,
         fetchedAt: DateTime.now(),
-        source: 'NIFS RISA (실시간 수온) · NIFS 어장환경관측 (수질, mock)',
+        source: 'NIFS RISA (실시간 수온) · NIFS 적조정보 (mock)',
       );
     }
 
@@ -105,25 +98,45 @@ class MockOceanService implements OceanService {
       stationName: stationName,
       waterTemp: series.last,
       layer: _legacyLayer,
-      salinity: _salinity[stationCode] ?? _salinity['001'],
-      dissolvedOxygen: _dissolvedOxygen[stationCode] ?? _dissolvedOxygen['001'],
-      waterQualityStatus: WaterQualityStatus.available,
       observedAt: _todayNoon(),
       fetchedAt: DateTime.now(),
       source: '바다누리 해양정보 · NIFS RISA (mock)',
     );
   }
 
-  /// Like the live feed, stations with no survey point within 50km (here:
-  /// 백령도) report none nearby.
-  static const _noNearbySurvey = {'fbn69'};
-
   @override
-  Future<WaterQuality?> fetchWaterQuality(String stationCode, {bool refresh = false}) async {
+  Future<RedTideInfo> fetchRedTide({bool refresh = false}) async {
     await Future<void>.delayed(const Duration(milliseconds: 100));
-    final info = oceanStationCatalog[stationCode];
-    if (info == null) throw Exception('$stationCode 관측소의 좌표를 알 수 없습니다.');
-    return _noNearbySurvey.contains(stationCode) ? null : _mockQuality(info);
+    final now = DateTime.now();
+    final day = DateTime(now.year, now.month, now.day);
+    RedTideReport report(int daysAgo, double max) => RedTideReport(
+          code: 'mock-$daysAgo',
+          reportDate: day.subtract(Duration(days: daysAgo)),
+          occurrences: [
+            RedTideOccurrence(
+              organism: 'Cochlodinium polykrikoides',
+              area: '경남 통영',
+              minDensity: 0.2,
+              maxDensity: max,
+              minTemp: 24.8,
+              maxTemp: 26.1,
+            ),
+          ],
+        );
+    final latest = report(1, 120);
+    return RedTideInfo(
+      latest: RedTideReport(
+        code: latest.code,
+        reportDate: latest.reportDate,
+        occurrences: latest.occurrences,
+        progress: '- 경남 통영: 곤리도 0.2~120 개체/mL 출현\n- 전남 고흥: 미출현',
+        breaking: '- 적조주의보 유지\n■ (경남 통영시 두미도 서측~지심도 동측)',
+        outlook: '- 남풍 계열 바람에 의해 연안으로 집적될 수 있어 주의가 필요함',
+        request: '- 발령해역 주변 양식장에서는 먹이 공급량 조절과 야간 산소발생기 가동 바람',
+      ),
+      recent: [latest, report(2, 80), report(3, 45)],
+      fetchedAt: now,
+    );
   }
 
   @override
@@ -166,31 +179,6 @@ class MockOceanService implements OceanService {
         .map((info) => OceanStation.fromCatalog(info, layers: sortLayersTopDown(_layerTemps(info).keys)))
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
-  }
-
-  /// Plausible 어장환경 survey values, shaped like a real `femoSeaList`
-  /// record (a late-October survey) and nudged per station so switching
-  /// stations visibly changes them.
-  static WaterQuality _mockQuality(OceanStationInfo info) {
-    final k = info.code.codeUnits.fold<int>(0, (a, b) => a + b) % 10 / 10;
-    double r(double v, [int digits = 2]) => double.parse(v.toStringAsFixed(digits));
-    return WaterQuality(
-      pointName: '${info.name} 연안 1정점',
-      distanceKm: r(1.5 + k * 8, 1),
-      observedAt: DateTime(DateTime.now().year - 1, 10, 27, 15, 20),
-      depthM: 30,
-      transparencyM: r(3 + k * 3, 1),
-      surface: {
-        'salinity': r(32.4 + k), 'ph': r(8.04 + k / 10), 'dissolvedOxygen': r(6.7 + k),
-        'cod': r(1.1 + k / 2), 'ammonia': r(0.008 + k / 100, 3), 'din': r(0.086 + k / 20, 3),
-        'dip': r(0.011 + k / 100, 3), 'chlorophyll': r(0.42 + k), 'suspendedSolids': r(4.2 + k * 3),
-      },
-      bottom: {
-        'salinity': r(33.0 + k), 'ph': r(7.99 + k / 10), 'dissolvedOxygen': r(6.2 + k),
-        'cod': r(0.88 + k / 2), 'ammonia': r(0.006 + k / 100, 3), 'din': r(0.125 + k / 20, 3),
-        'dip': r(0.02 + k / 100, 3), 'chlorophyll': r(0.12 + k), 'suspendedSolids': r(9.7 + k * 3),
-      },
-    );
   }
 
   static DateTime _todayNoon() {

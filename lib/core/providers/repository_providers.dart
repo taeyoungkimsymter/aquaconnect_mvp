@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/repositories/ai_report_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/disease_info_repository.dart';
-import '../../data/repositories/news_repository.dart';
 import '../../data/repositories/farm_repository.dart';
 import '../../data/repositories/memo_repository.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/org_repository.dart';
+import '../../data/repositories/mock/mock_ai_report_repository.dart';
 import '../../data/repositories/mock/mock_auth_repository.dart';
 import '../../data/repositories/mock/mock_disease_info_repository.dart';
-import '../../data/repositories/mock/mock_news_repository.dart';
 import '../../data/repositories/mock/mock_farm_repository.dart';
 import '../../data/repositories/mock/mock_memo_repository.dart';
 import '../../data/repositories/mock/mock_notification_repository.dart';
 import '../../data/repositories/mock/mock_org_repository.dart';
 import '../../data/repositories/mock/mock_report_repository.dart';
 import '../../data/repositories/mock/mock_share_link_repository.dart';
+import '../../data/repositories/remote/remote_ai_report_repository.dart';
 import '../../data/repositories/remote/remote_auth_repository.dart';
 import '../../data/repositories/remote/remote_disease_info_repository.dart';
-import '../../data/repositories/remote/remote_news_repository.dart';
 import '../../data/repositories/remote/remote_farm_repository.dart';
 import '../../data/repositories/remote/remote_memo_repository.dart';
 import '../../data/repositories/remote/remote_notification_repository.dart';
@@ -78,11 +78,6 @@ final orgRepositoryProvider = Provider<OrgRepository>((ref) {
 
 final webPushServiceProvider = Provider<WebPushService>((ref) => WebPushService());
 
-final newsRepositoryProvider = Provider<NewsRepository>((ref) {
-  if (Env.useMock) return MockNewsRepository();
-  return RemoteNewsRepository(apiClient: ref.watch(apiClientProvider));
-});
-
 final diseaseInfoRepositoryProvider = Provider<DiseaseInfoRepository>((ref) {
   if (Env.useMock) return MockDiseaseInfoRepository();
   return RemoteDiseaseInfoRepository(apiClient: ref.watch(apiClientProvider));
@@ -127,6 +122,11 @@ final reportRepositoryProvider = Provider<ReportRepository>((ref) {
   return RemoteReportRepository(apiClient: ref.watch(apiClientProvider));
 });
 
+final aiReportRepositoryProvider = Provider<AiReportRepository>((ref) {
+  if (Env.useMock) return MockAiReportRepository();
+  return RemoteAiReportRepository(apiClient: ref.watch(apiClientProvider));
+});
+
 final shareLinkRepositoryProvider = Provider<ShareLinkRepository>((ref) {
   if (Env.useMock) {
     return MockShareLinkRepository(
@@ -147,7 +147,7 @@ final digestSettingsStoreProvider = Provider<DigestSettingsStore>((ref) {
   return RemoteDigestSettingsStore(apiClient: ref.watch(apiClientProvider));
 });
 
-/// The signed-in member's "업무 알림 설정" (digest notification prefs). Read by
+/// The signed-in member's "오늘의 업무 알림" (digest notification prefs). Read by
 /// both the settings screen and the MyPage list row (for its "오후 4:00"
 /// trailing value) so they always agree.
 final digestSettingsProvider = AsyncNotifierProvider<DigestSettingsNotifier, DigestSettings>(DigestSettingsNotifier.new);

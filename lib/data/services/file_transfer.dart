@@ -4,55 +4,65 @@ import 'dart:typed_data';
 
 import 'package:web/web.dart' as web;
 
-/// Document types a 댓글 may carry — keep in step with the server's allow-list
-/// (server/src/routes/memos.js).
-const commentFileExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'hwp', 'hwpx', 'txt', 'csv', 'zip'];
-
+/// A file the user picked from the browser's file chooser.
 class PickedFile {
-  const PickedFile({required this.name, required this.bytes});
+  const PickedFile({required this.name, required this.contentType, required this.bytes});
 
   final String name;
+  final String contentType;
   final Uint8List bytes;
 }
 
-/// Opens the browser's file chooser for one document. Resolves to null if
-/// the user cancels.
-Future<PickedFile?> pickDocument() {
-  final completer = Completer<PickedFile?>();
+/// Opens the browser's file chooser (any type, several at once). Resolves to
+/// an empty list if the user cancels.
+Future<List<PickedFile>> pickFiles() {
+  final completer = Completer<List<PickedFile>>();
   final input = web.HTMLInputElement()
     ..type = 'file'
-    ..accept = commentFileExtensions.map((e) => '.$e').join(',')
+    ..multiple = true
     ..style.display = 'none';
   web.document.body!.append(input);
 
-  void finish(PickedFile? result, [Object? error]) {
+  void finish(List<PickedFile> result, [Object? error]) {
     input.remove();
     if (completer.isCompleted) return;
     error == null ? completer.complete(result) : completer.completeError(error);
   }
 
   Future<void> onChange() async {
-    final file = input.files?.item(0);
-    if (file == null) return finish(null);
+    final files = input.files;
+    if (files == null || files.length == 0) return finish(const []);
     try {
-      final buffer = await file.arrayBuffer().toDart;
-      finish(PickedFile(name: file.name, bytes: buffer.toDart.asUint8List()));
+      final picked = <PickedFile>[];
+      for (var i = 0; i < files.length; i++) {
+        final file = files.item(i)!;
+        final buffer = await file.arrayBuffer().toDart;
+        picked.add(PickedFile(
+          name: file.name,
+          contentType: file.type.isEmpty ? 'application/octet-stream' : file.type,
+          bytes: buffer.toDart.asUint8List(),
+        ));
+      }
+      finish(picked);
     } catch (e) {
-      finish(null, Exception('파일을 불러오지 못했어요.'));
+      finish(const [], Exception('파일을 불러오지 못했어요.'));
     }
   }
 
-  input.addEventListener('change', ((web.Event _) {
-    onChange();
-  }).toJS);
-  input.addEventListener('cancel', ((web.Event _) => finish(null)).toJS);
+  input.addEventListener(
+    'change',
+    ((web.Event _) {
+      onChange();
+    }).toJS,
+  );
+  input.addEventListener('cancel', ((web.Event _) => finish(const [])).toJS);
   input.click();
   return completer.future;
 }
 
 /// Hands [bytes] to the browser as a download named [fileName].
-void saveFile(String fileName, Uint8List bytes) {
-  final blob = web.Blob([bytes.toJS].toJS, web.BlobPropertyBag(type: 'application/octet-stream'));
+void saveFile(Uint8List bytes, String fileName, String contentType) {
+  final blob = web.Blob([bytes.toJS].toJS, web.BlobPropertyBag(type: contentType));
   final url = web.URL.createObjectURL(blob);
   final anchor = web.HTMLAnchorElement()
     ..href = url
@@ -61,11 +71,6 @@ void saveFile(String fileName, Uint8List bytes) {
   web.document.body!.append(anchor);
   anchor.click();
   anchor.remove();
-  web.URL.revokeObjectURL(url);
-}
-
-String formatFileSize(int bytes) {
-  if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
-  return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  // Give the browser a moment to start the download before freeing the blob.
+  Timer(const Duration(seconds: 30), () => web.URL.revokeObjectURL(url));
 }

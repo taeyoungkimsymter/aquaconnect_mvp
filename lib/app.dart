@@ -27,7 +27,7 @@ class _AquaConnectAppState extends ConsumerState<AquaConnectApp> {
     _pushMessages = ref.read(webPushServiceProvider).workerMessages().listen((message) {
       ref.invalidate(notificationFeedProvider);
       final link = message['link'];
-      if (message['type'] == 'aquaconnect-open' && link != null) ref.read(routerProvider).push(link);
+      if (message['type'] == 'aquaconnect-open' && link != null) openAppLink(ref.read(routerProvider), link);
     });
   }
 

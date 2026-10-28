@@ -143,21 +143,8 @@ class _Body extends StatelessWidget {
               if (avgTemp == null)
                 const Text('수온 정보가 있는 양식장이 없습니다.', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
               else
-                Consumer(
-                  builder: (context, ref, _) {
-                    final quality = ref.watch(fleetWaterQualityProvider).valueOrNull;
-                    return OceanStatGrid(
-                      snapshot: OceanSnapshot(
-                        region: '담당 해역',
-                        stationName: '평균',
-                        waterTemp: avgTemp,
-                        salinity: quality?.salinity,
-                        dissolvedOxygen: quality?.dissolvedOxygen,
-                        waterQualityStatus: quality?.status ?? WaterQualityStatus.unavailable,
-                        source: '',
-                      ),
-                    );
-                  },
+                OceanStatGrid(
+                  snapshot: OceanSnapshot(region: '담당 해역', stationName: '평균', waterTemp: avgTemp, source: ''),
                 ),
             ],
           ),

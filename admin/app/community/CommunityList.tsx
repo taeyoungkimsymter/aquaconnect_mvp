@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Image as ImageIcon, MessageCircle, Search, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Image as ImageIcon, MessageCircle, Search, Trash2, X } from "lucide-react";
 import { adminFetch, formatDateTime, type MemoPage, type Organization } from "@/lib/api";
 import { Badge, Button, COLORS, Empty, ErrorBox, inputStyle, Loading, PageHeader, RefreshButton } from "@/components/ui";
+import ExportPanel from "./ExportPanel";
 
 const PAGE_SIZE = 20;
 
@@ -20,6 +21,7 @@ export default function CommunityList({ authorId, authorName }: { authorId: stri
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     adminFetch<Organization[]>("organizations").then(setOrgs).catch(() => {});
@@ -94,7 +96,21 @@ export default function CommunityList({ authorId, authorName }: { authorId: stri
           {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
         <RefreshButton onClick={fetchMemos} />
+        <Button variant="outline" onClick={() => setExporting((v) => !v)}>
+          <Download size={14} /> CSV 내보내기
+        </Button>
       </div>
+
+      {exporting && (
+        <ExportPanel
+          orgId={orgId}
+          orgName={orgs.find((o) => o.id === orgId)?.name ?? null}
+          authorId={authorId}
+          authorName={authorName}
+          q={q}
+          onClose={() => setExporting(false)}
+        />
+      )}
 
       {/* 적용 중인 필터 */}
       {(authorId || q) && (

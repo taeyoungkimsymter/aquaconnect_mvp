@@ -3,8 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
 
-/// "업무 알림 설정" — the member's 미완료된 업무 / 오늘 해야할 일 notification
-/// preferences (they replaced the 하루 요약 / 주간 요약; field names are kept), chosen in
+/// "오늘의 업무 알림" — the member's daily-tasks notification preferences, chosen in
 /// MyPage. The server sends the summaries (server/src/lib/digest.js), so in
 /// the real app they live on the server ([RemoteDigestSettingsStore]); mock
 /// mode keeps them on the device ([LocalDigestSettingsStore]).
@@ -17,17 +16,17 @@ class DigestSettings {
 
   static const defaults = DigestSettings(
     dailyEnabled: true,
-    dailyTime: TimeOfDay(hour: 8, minute: 30),
+    dailyTime: TimeOfDay(hour: 8, minute: 0),
     weeklyEnabled: true,
   );
 
-  /// 미완료된 업무 알림 on/off.
   final bool dailyEnabled;
 
-  /// Korean time. One send time for both notifications.
+  /// Korean time.
   final TimeOfDay dailyTime;
 
-  /// 오늘 해야할 일 알림 on/off (sent at [dailyTime] too).
+  /// The old 주간 요약 flag. The server no longer sends a weekly summary;
+  /// kept so the settings round-trip unchanged.
   final bool weeklyEnabled;
 
   DigestSettings copyWith({bool? dailyEnabled, TimeOfDay? dailyTime, bool? weeklyEnabled}) {
@@ -38,15 +37,15 @@ class DigestSettings {
     );
   }
 
-  /// "08:30" — the server's format.
+  /// "16:00" — the server's format.
   String get dailyTimeKey =>
       '${dailyTime.hour.toString().padLeft(2, '0')}:${dailyTime.minute.toString().padLeft(2, '0')}';
 
   factory DigestSettings.fromJson(Map<String, dynamic> json) {
-    final parts = (json['dailyTime'] as String? ?? '08:30').split(':');
+    final parts = (json['dailyTime'] as String? ?? '08:00').split(':');
     return DigestSettings(
       dailyEnabled: json['dailyEnabled'] as bool? ?? defaults.dailyEnabled,
-      dailyTime: TimeOfDay(hour: int.tryParse(parts[0]) ?? 8, minute: int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 30),
+      dailyTime: TimeOfDay(hour: int.tryParse(parts[0]) ?? 8, minute: int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 0),
       weeklyEnabled: json['weeklyEnabled'] as bool? ?? defaults.weeklyEnabled,
     );
   }

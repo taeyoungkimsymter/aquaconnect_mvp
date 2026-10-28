@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/data_providers.dart';
 import '../theme/app_colors.dart';
 import '../../data/models/ocean_reading.dart';
+import '../../data/models/red_tide.dart';
 
 class StatGridTile extends StatelessWidget {
   const StatGridTile({super.key, required this.label, required this.value, this.valueColor});
@@ -29,103 +32,42 @@ class StatGridTile extends StatelessWidget {
   }
 }
 
-/// The 3-tile grid (수온·염도·용존산소) repeated on Info / AllReport /
-/// ReportDetail.
-/// Salinity and DO read "주변 없음" when no 어장환경 survey point lies
-/// within 50km, and "정보 없음" when the lookup itself failed.
-class OceanStatGrid extends StatelessWidget {
+/// 적조 status in one or two words, with its color: 주의보 (a 주의보/경보 in
+/// force), 출현 (a 속보 in the last few days), 없음.
+(String, Color) redTideStatusLabel(RedTideInfo info) {
+  if (info.hasAdvisory) return ('주의보', AppColors.danger);
+  if (info.isActive) return ('출현', AppColors.warningDark);
+  return ('없음', AppColors.good);
+}
+
+/// The 수온·적조 tiles repeated on Home / AllReport / ReportDetail. Both
+/// are current data: the realtime NIFS water temperature and the newest
+/// NIFS 적조 속보.
+class OceanStatGrid extends ConsumerWidget {
   const OceanStatGrid({super.key, required this.snapshot});
 
   final OceanSnapshot snapshot;
 
-  String _qualityValue(double? value) {
-    if (value != null) return value.toStringAsFixed(1);
-    return snapshot.waterQualityStatus == WaterQualityStatus.noneNearby ? '주변 없음' : '정보 없음';
-  }
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final layerLabel = oceanLayerDisplayLabel(snapshot.layer);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: StatGridTile(
-                label: layerLabel == null ? '수온' : '수온 · $layerLabel',
-                value: '${snapshot.waterTemp.toStringAsFixed(1)}℃',
-                valueColor: AppColors.danger,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: StatGridTile(label: '염도', value: _qualityValue(snapshot.salinity)),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: StatGridTile(
-                label: '용존산소',
-                value: _qualityValue(snapshot.dissolvedOxygen),
-                // 5 mg/L: the DO floor the farm report also uses.
-                valueColor: switch (snapshot.dissolvedOxygen) {
-                  null => null,
-                  final v when v < 5 => AppColors.danger,
-                  _ => AppColors.good,
-                },
-              ),
-            ),
-          ],
-        ),
-        if (snapshot.waterQualityStatus == WaterQualityStatus.noneNearby) ...[
-          const SizedBox(height: 6),
-          const Text('반경 50km 안에 어장환경 조사 정점이 없어 염도·용존산소를 표시할 수 없어요',
-              style: TextStyle(fontSize: 9.5, color: AppColors.textMuted)),
-        ],
-      ],
+    final redTide = ref.watch(redTideProvider);
+    final (tideValue, tideColor) = redTide.when(
+      data: redTideStatusLabel,
+      loading: () => ('…', AppColors.textMuted),
+      error: (_, _) => ('정보 없음', AppColors.textMuted),
     );
-  }
-}
-
-/// The extra 어장환경 survey values (pH, nutrients, ...) beyond the 4-tile
-/// [OceanStatGrid], laid out as two rows of four.
-class WaterQualityGrid extends StatelessWidget {
-  const WaterQualityGrid({super.key, required this.quality});
-
-  final WaterQuality quality;
-
-  static String _format(double? v) {
-    if (v == null) return '-';
-    if (v.abs() < 0.1) return v.toStringAsFixed(3);
-    if (v.abs() < 10) return v.toStringAsFixed(2);
-    return v.toStringAsFixed(1);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tiles = [
-      ('pH', _format(quality.value('ph'))),
-      ('COD', _format(quality.value('cod'))),
-      ('암모니아질소', _format(quality.value('ammonia'))),
-      ('용존무기질소', _format(quality.value('din'))),
-      ('용존무기인', _format(quality.value('dip'))),
-      ('클로로필a', _format(quality.value('chlorophyll'))),
-      ('부유물질', _format(quality.value('suspendedSolids'))),
-      ('투명도', quality.transparencyM == null ? '-' : '${_format(quality.transparencyM)}m'),
-    ];
-    Widget row(int start) => Row(
-          children: [
-            for (var i = start; i < start + 4; i++) ...[
-              if (i > start) const SizedBox(width: 8),
-              Expanded(child: StatGridTile(label: tiles[i].$1, value: tiles[i].$2)),
-            ],
-          ],
-        );
-    return Column(
+    return Row(
       children: [
-        row(0),
-        const SizedBox(height: 8),
-        row(4),
+        Expanded(
+          child: StatGridTile(
+            label: layerLabel == null ? '수온' : '수온 · $layerLabel',
+            value: '${snapshot.waterTemp.toStringAsFixed(1)}℃',
+            valueColor: AppColors.danger,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: StatGridTile(label: '적조 속보', value: tideValue, valueColor: tideColor)),
       ],
     );
   }

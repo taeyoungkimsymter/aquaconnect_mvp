@@ -4,13 +4,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/korean_search.dart';
+import '../../core/widgets/farm_search_field.dart';
 import '../../data/models/farm.dart';
 import 'farm_form_sheet.dart';
 
 /// "등록 양식장 관리" — list/create/edit/delete for the institute's farms,
 /// opened from MyPage.
-class FarmManagementScreen extends ConsumerWidget {
+class FarmManagementScreen extends ConsumerStatefulWidget {
   const FarmManagementScreen({super.key});
+
+  @override
+  ConsumerState<FarmManagementScreen> createState() => _FarmManagementScreenState();
+}
+
+class _FarmManagementScreenState extends ConsumerState<FarmManagementScreen> {
+  String _query = '';
 
   void _openForm(BuildContext context, {Farm? existing}) {
     showModalBottomSheet<bool>(
@@ -43,7 +52,7 @@ class FarmManagementScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final farmsAsync = ref.watch(farmsProvider);
 
     return Scaffold(
@@ -67,15 +76,28 @@ class FarmManagementScreen extends ConsumerWidget {
                   textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
             );
           }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 90),
-            itemCount: farms.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 10),
-            itemBuilder: (context, i) => _FarmManagementCard(
-              farm: farms[i],
-              onEdit: () => _openForm(context, existing: farms[i]),
-              onDelete: () => _confirmDelete(context, ref, farms[i]),
-            ),
+          final shown = searchFarms(farms, _query);
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                child: FarmSearchField(onChanged: (q) => setState(() => _query = q)),
+              ),
+              Expanded(
+                child: shown.isEmpty
+                    ? const Center(child: Text('맞는 양식장이 없어요', style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)))
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 90),
+                        itemCount: shown.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, i) => _FarmManagementCard(
+                          farm: shown[i],
+                          onEdit: () => _openForm(context, existing: shown[i]),
+                          onDelete: () => _confirmDelete(context, ref, shown[i]),
+                        ),
+                      ),
+              ),
+            ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),

@@ -16,7 +16,6 @@ export const metadata: Metadata = {
 const navItems = [
   { href: "/",          iconKey: "dashboard", label: "대시보드" },
   { href: "/community", iconKey: "community", label: "커뮤니티 관리" },
-  { href: "/news",      iconKey: "news",      label: "수산 뉴스 관리" },
   { href: "/accounts",  iconKey: "accounts",  label: "계정 관리" },
 ];
 

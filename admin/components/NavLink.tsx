@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, MessagesSquare, Newspaper, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Users, MessagesSquare, type LucideIcon } from "lucide-react";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   community: MessagesSquare,
   accounts: Users,
-  news: Newspaper,
 };
 
 interface NavLinkProps {

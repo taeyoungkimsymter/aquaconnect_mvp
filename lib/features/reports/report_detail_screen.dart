@@ -16,6 +16,7 @@ import '../../data/models/farm.dart';
 import '../../data/models/memo.dart';
 import '../../data/models/ocean_reading.dart';
 import '../../data/models/report.dart';
+import 'ai_report_list_screen.dart';
 import 'report_history_section.dart';
 import 'share_link_sheet.dart';
 
@@ -240,6 +241,8 @@ class _Body extends ConsumerWidget {
             title: 'AI 정리 소견',
             bullets: r.findings,
           ),
+        const SizedBox(height: 16),
+        _AiReportEntry(farmId: farm.id),
         if (r != null) ...[
           const SizedBox(height: 16),
           Container(
@@ -289,6 +292,57 @@ class _Body extends ConsumerWidget {
                 style: const TextStyle(fontSize: 10.5, color: AppColors.textFaint)),
           ),
       ],
+    );
+  }
+}
+
+/// Entry to the AI 관리 리포트 (symterAI port): latest draft's status at a
+/// glance, tap through to the list / create flow.
+class _AiReportEntry extends ConsumerWidget {
+  const _AiReportEntry({required this.farmId});
+  final String farmId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final latest = ref.watch(aiReportsProvider(farmId)).valueOrNull?.firstOrNull;
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => context.push('/reports/$farmId/ai'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(border: Border.all(color: AppColors.brandTintBorder), borderRadius: BorderRadius.circular(14)),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(color: AppColors.brandTint, borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.auto_awesome, size: 18, color: AppColors.brand),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('AI 관리 리포트', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                    const SizedBox(height: 2),
+                    Text(
+                      latest == null
+                          ? '기간·메모를 골라 AI가 근거 있는 리포트 초안을 써요'
+                          : '최근: ${aiReportPeriodLabel(latest)} · ${latest.isConfirmed ? '확정' : '초안'} · 메모 ${latest.memoCount}건',
+                      style: const TextStyle(fontSize: 11.5, color: AppColors.textTertiary),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.neutralArrow),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

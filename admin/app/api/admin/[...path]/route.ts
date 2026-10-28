@@ -23,7 +23,8 @@ async function forward(req: NextRequest, { params }: { params: Promise<{ path: s
   }
 
   const headers = new Headers();
-  for (const h of ["Content-Type", "Cache-Control"]) {
+  // Content-Disposition / X-Export-*: the 글 로그 CSV download.
+  for (const h of ["Content-Type", "Cache-Control", "Content-Disposition", "X-Export-Rows", "X-Export-Truncated"]) {
     const v = res.headers.get(h);
     if (v) headers.set(h, v);
   }

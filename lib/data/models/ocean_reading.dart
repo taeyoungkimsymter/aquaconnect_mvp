@@ -96,54 +96,6 @@ String? oceanLayerDisplayLabel(String? layer) {
   }
 }
 
-/// One NIFS 어장환경 survey (`femoSeaList`, via `GET /api/ocean/quality`)
-/// at the survey point nearest to a station. Unlike the realtime water
-/// temperature this is a periodic field survey (roughly quarterly), so
-/// [observedAt] can be months old — the UI always shows it.
-class WaterQuality {
-  const WaterQuality({
-    required this.pointName,
-    required this.distanceKm,
-    required this.observedAt,
-    required this.surface,
-    required this.bottom,
-    this.depthM,
-    this.transparencyM,
-  });
-
-  /// e.g. "부산 연안 1정점".
-  final String pointName;
-  final double distanceKm;
-  final DateTime observedAt;
-  final double? depthM;
-  final double? transparencyM;
-
-  /// Keyed by the server's field names: salinity, ph, dissolvedOxygen,
-  /// cod, ammonia, nitrate, nitrite, din, totalNitrogen, dip,
-  /// totalPhosphorus, silicate, chlorophyll, suspendedSolids, temp.
-  final Map<String, double?> surface;
-  final Map<String, double?> bottom;
-
-  /// Farmed fish live below the surface, so the bottom-layer value wins
-  /// when the survey has one (same reasoning as the water-temp layer pick).
-  double? value(String key) => bottom[key] ?? surface[key];
-
-  factory WaterQuality.fromJson(Map<String, dynamic> json) {
-    Map<String, double?> layer(Object? raw) => {
-          for (final e in (raw as Map<String, dynamic>? ?? const {}).entries) e.key: OceanObservation._toDouble(e.value),
-        };
-    return WaterQuality(
-      pointName: '${json['fishery']} ${json['kind']} ${json['point']}정점',
-      distanceKm: OceanObservation._toDouble(json['distanceKm']) ?? 0,
-      observedAt: DateTime.parse(json['observedAt'] as String).toLocal(),
-      depthM: OceanObservation._toDouble(json['depthM']),
-      transparencyM: OceanObservation._toDouble(json['transparencyM']),
-      surface: layer(json['surface']),
-      bottom: layer(json['bottom']),
-    );
-  }
-}
-
 /// Parses a `risaList` observation's date ('2026-10-12' or '20261012') and
 /// time ('10:30:00' / '10:30') into a local DateTime, or null if malformed.
 DateTime? parseObservationTime(String date, String time) {
@@ -156,46 +108,23 @@ DateTime? parseObservationTime(String date, String time) {
   );
 }
 
-/// Whether [OceanSnapshot.salinity] / [OceanSnapshot.dissolvedOxygen]
-/// could be filled from a nearby NIFS 어장환경 survey point.
-enum WaterQualityStatus {
-  available,
-
-  /// The lookup worked but no survey point lies within 50km.
-  noneNearby,
-
-  /// The lookup failed or the station has no known coordinates.
-  unavailable,
-}
-
 /// Aggregated environment snapshot used to render the stat grid shown on
-/// Info / AllReport / ReportDetail.
-///
-/// Water temperature comes from the realtime NIFS `risaList` feed (current
-/// value only — NIFS exposes no history); [salinity], [dissolvedOxygen] and
-/// the rest of [waterQuality] come from the nearest NIFS 어장환경 survey
-/// point, and stay null unless [waterQualityStatus] is available.
+/// Home / AllReport / ReportDetail. Water temperature comes from the realtime
+/// NIFS `risaList` feed (current value only — NIFS exposes no history).
 class OceanSnapshot {
   const OceanSnapshot({
     required this.region,
     required this.stationName,
     required this.waterTemp,
     required this.source,
-    this.salinity,
-    this.dissolvedOxygen,
-    this.waterQualityStatus = WaterQualityStatus.unavailable,
     this.layer,
     this.observedAt,
-    this.waterQuality,
     this.fetchedAt,
   });
 
   final String region;
   final String stationName;
   final double waterTemp;
-  final double? salinity;
-  final double? dissolvedOxygen;
-  final WaterQualityStatus waterQualityStatus;
   final String source;
 
   /// Which depth [waterTemp] was measured at ('표층'/'중층'/'저층'), when
@@ -205,8 +134,6 @@ class OceanSnapshot {
 
   /// When the station measured [waterTemp].
   final DateTime? observedAt;
-
-  final WaterQuality? waterQuality;
 
   /// When the app fetched this snapshot.
   final DateTime? fetchedAt;

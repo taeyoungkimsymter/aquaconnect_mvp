@@ -16,7 +16,7 @@ for Flutter Web).
    - `ADMIN_API_KEY` — (선택) 관리자 대시보드(`admin/`)가 `/api/admin/*`를 부를 때 쓰는 공유 비밀값.
      비워두면 관리자 API 전체가 꺼집니다(503). `admin/`의 같은 이름 환경변수와 값을 맞추세요.
    - `NIFS_API_KEY` — (선택) 발급받은 키. 비워두면 `D:\202609`와 동일한 기본 데모 키로 동작.
-   - `NIFS_FEMO_API_KEY` — (선택) 어장환경관측(`femoSeaList`) 키. 비워두면 코드에 저장된 기본 키로 동작.
+   - `NIFS_REDTIDE_API_KEY` — (선택) 적조 정보(`redtideList`/`redtideDetail`) 키. 비워두면 코드에 저장된 기본 키로 동작.
    - `SEED_DEMO_PASSWORD` — (선택) `npm run seed`가 만드는 소유자 계정 비밀번호. 기본값 `demo1234`.
    - `SEED_ORG_NAME` / `SEED_OWNER_NAME` / `SEED_OWNER_EMAIL` / `SEED_OWNER_PHONE` — (선택) 시드할 관리원명·소유자
      이름·로그인 이메일·전화번호. 기본값 해강수산질병관리원 / 이동길 / `leedonggil@haegang.kr` / 없음.
@@ -89,7 +89,7 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 | POST/GET | `/api/share-links` | 공유링크 발급/목록 |
 | GET | `/api/public/reports/:token` | **공개** — 공유링크로 리포트 조회 |
 | GET | `/api/ocean/realtime?station=` | **공개** — NIFS 실시간 수온 프록시 |
-| GET | `/api/ocean/quality?lat=&lon=[&refresh=1]` | **공개** — 가장 가까운(50km 이내) NIFS 어장환경 조사 정점의 최신 수질(염분·DO·pH·영양염 등). 없으면 `null` |
+| GET | `/api/ocean/redtide[?refresh=1]` | **공개** — 최신 NIFS 적조 속보(진행상황·특보·전망·당부사항·출현 해역)와 최근 속보 10건 |
 
 ## 알아둘 점
 
@@ -99,17 +99,17 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 - NIFS `risaList` API는 실시간 수온만 제공하고 7일 이력/염도/용존산소/적조는
   주지 않습니다 — `oceanSnapshotForFarm()`은 그 사실을 숨기지 않고 그대로
   단일 값만 리포트 생성에 반영합니다.
-- 염분·용존산소·pH 등은 NIFS 어장환경관측(`femoSeaList`, `src/lib/femo.js`,
-  `D:\py\croll\main.py` 이식)에서 가져옵니다. 실시간 센서가 아니라 연 4회
-  내외의 정기 현장조사라 관측일이 수개월 전일 수 있고, 서버는 작년+올해
-  자료를 메모리에 6시간 캐시합니다 (`refresh=1`은 1분에 한 번까지만 재조회).
+- 적조 정보는 NIFS `redtideList`/`redtideDetail`(`src/lib/redtide.js`)에서 가져옵니다. 실제
+  응답 필드명은 PDF 명세와 다르고(`cod_news`, `day_report`, `nam_biology`, `txt_seas` …),
+  상세 조회 파라미터도 `srcode`가 아니라 `cod_news`입니다. 30분 캐시, `refresh=1`은 1분에 한 번까지.
+  (예전 어장환경 정기조사 `femoSeaList` 수질 데이터는 최신화가 안 돼서 제거했습니다.)
 
 ## 알림 (Web Push)
 
 - 알림이 생기는 경우: 양식장 위험도가 올라갈 때(양호→주의/위험, 주의→위험 — 조직 전체), 다른 구성원이
   메모를 남길 때(작성자 제외). 각 구성원이 마이페이지 > 알림 설정에서 종류별로 끌 수 있고, 끈 종류는 알림함에도 쌓이지 않습니다.
 - `GET /api/notifications` 알림함, `POST /api/notifications/:id/read`, `POST /api/notifications/read-all`,
-  `GET|PUT /api/notifications/settings`, `GET|PUT /api/notifications/digest` (업무 알림 설정 `{dailyEnabled, dailyTime:"HH:MM", weeklyEnabled}`),
+  `GET|PUT /api/notifications/settings`, `GET|PUT /api/notifications/digest` (하루 요약 설정 `{dailyEnabled, dailyTime:"HH:MM", weeklyEnabled}`),
   `GET /api/notifications/push/public-key`,
   `POST|DELETE /api/notifications/push/subscriptions`, `POST /api/notifications/test`.
 - 기기 쪽은 `web/push_sw.js` 서비스워커가 받습니다. 안드로이드 Chrome·PC 브라우저는 바로 되고,
@@ -166,62 +166,12 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
   가입 횟수 제한(IP당 1시간 10건)은 회원가입과 공유합니다.
 - 앱 링크는 `<웹 주소>/#/invite/<code>`. 초대 생성·취소·합류는 변경 이력에 남습니다.
 
-### 댓글 첨부 · 사람 호출
-
-- `POST /api/memos/:id/comments` `{content, mentionedMemberIds?, attachments?: [{kind: photo|file, fileName, contentType, dataBase64}]}` — 글 없이 첨부만 보내도 됩니다.
-  사진은 jpeg/png/webp 5MB 이하 최대 5장, 파일은 pdf·doc(x)·xls(x)·ppt(x)·hwp(x)·txt·csv·zip 10MB 이하 최대 3개(합계 24MB). 그 밖의 형식(html·svg·exe 등)은 거부합니다.
-- 첨부 받기: `GET /api/memos/:id/comments/:commentId/attachments/:attachmentId` (같은 조직만; 파일은 항상 내려받기로 응답).
-- 호출한 구성원(같은 조직의 활동 중인 사람, 본인 제외, 최대 10명)은 따로 "호출했어요" 알림을 받고, 나머지 스레드 참여자는 기존 "새 댓글" 알림을 받습니다.
-
-### 미완료된 업무 / 오늘 해야할 일
+### 오늘의 업무 알림 (구 하루 요약 / 주간 요약)
 
 서버가 1분마다 확인해서 (`src/lib/digest.js`, 한국 시간 기준) 알림함 + 휴대폰 푸시로 보냅니다.
-- 업무 = '할일' 태그가 붙었거나 `할일:`이 들어간 메모. 메모는 누구나 완료 처리할 수 있고(`PUT /api/memos/:id/completion` `{completed}`, 할일이 아니어도 가능) `memos.completed_at`에 기록됩니다.
-- 미완료된 업무: 각자 정한 시각(기본 08:30)에 조직의 완료되지 않은 할일 메모 수와 앞쪽 몇 건.
-- 오늘 해야할 일: 같은 시각에 내가 담당하는 양식장의 완료되지 않은 할일 메모.
-- 설정 컬럼 이름은 예전 그대로입니다: `daily_*` = 미완료된 업무, `weekly_enabled`/`last_weekly_on` = 오늘 해야할 일. 발송 시각(`daily_time`)은 둘이 공유합니다.
-- 보낸 날짜를 `digest_settings.last_daily_on/last_weekly_on`에 기록하므로 재시작해도 같은 요약을 두 번 보내지 않습니다.
+- 각자 정한 시각(기본 08:00)에 그 사람의 남은 업무 수(완료 안 된 메모 중 나를 호출한 것, `담당:<이름>` 태그,
+  담당자 없는 내 할일), 그중 나를 호출한 수, 위험·주의 양식장 수. 링크는 `/memo?view=today`.
+- 주간 요약은 더 이상 보내지 않습니다 (`weekly_enabled`는 이전 앱 호환용으로만 남아 있음).
+- 메모 완료: `PUT /api/memos/:id/done` `{done}` — 기관 구성원 누구나. 다른 사람이 완료하면 작성자에게 알림.
+- 보낸 날짜를 `digest_settings.last_daily_on`에 기록하므로 재시작해도 같은 알림을 두 번 보내지 않습니다.
   이미 지난 시각으로 바꾸면 그날은 건너뛰고 다음 날부터 보냅니다.
-
-### 수산 뉴스 (정보 탭)
-
-해양수산부·국립수산과학원 공식 소식을 서버가 **정해진 시각에만** 수집해 `news_items`에 저장하고, 앱은 그 표만 읽습니다
-(앱을 열 때 외부 사이트를 부르지 않습니다). 코드는 `src/lib/news/`, API는 `src/routes/news.js`(앱)·`src/routes/admin.js`(관리자).
-
-**출처와 수집 방식** (실제로 확인한 것만 연결했습니다)
-- 해양수산부 보도자료 — **공식 RSS** `https://www.mof.go.kr/doc/ko/rssFeed.do?bbsSeq=10` (최근 10건, 게시 시각·본문 첫 줄 포함).
-  RSS가 닿지 않는 최근 30일은 공개 목록 페이지(robots.txt가 허용)를 **최초 1회** 읽어 보충합니다.
-- 국립수산과학원 보도자료 — **공식 API·RSS가 없어** 공개 게시판 목록(`/news/actionNewsList.do`)을 읽습니다.
-  robots.txt가 없고, 하루 3회·1쪽(최초 5쪽)·요청 사이 1초 간격으로 제한합니다. 공공데이터포털에서 두 기관의 보도자료 API는 찾지 못했습니다.
-- 앱·API가 노출하는 건 제목·출처·원문 주소·게시일·분류·짧은 소개(해양수산부 RSS 본문 첫 한두 줄)·확인된 지역/어종뿐입니다.
-  기사 전문은 저장하지 않고, 가져온 글은 HTML 태그를 지운 글자로만 저장합니다.
-
-**분류** (`classify.js`, 제목 기준 키워드) — 질병·방역 > 해양환경 > 지원사업 > 양식·정책 순으로 하나를 고르고,
-제목에 수산·양식 근거가 없거나 인사·입찰·행사·동정 같은 소식이면 저장하지 않습니다. 틀린 분류는 관리자 화면에서 고칠 수 있습니다.
-
-**실행 시각** — 한국 시간 매일 **08:00 · 14:00 · 20:00** (`scheduleNewsCollection`, 서버 안의 1분 타이머; 다이제스트와 같은 방식).
-- 슬롯은 `app_config.news_last_slot`에 조건부로 선점하고 DB advisory lock을 함께 써서, 서버가 여러 대여도 한 번만 돕니다.
-- 재배포·재시작 후 놓친 슬롯은 곧바로 한 번 수집합니다. 서버가 계속 떠 있는 Railway 서비스에서 그대로 동작합니다.
-- 서버가 잠드는 환경(서버리스 등)이면 타이머 대신 외부 cron이 `npm run news:collect`를 실행하거나
-  `POST /api/admin/news/collect`(헤더 `X-Admin-Key`)를 호출하게 하세요. `NEWS_COLLECTION_ENABLED=false`로 내장 타이머를 끌 수 있습니다.
-
-**안전장치** — 요청 15초 제한·실패 시 최대 2회 재시도(1초, 2초 간격), 응답 5MB 제한, 허용 도메인 두 곳(및 리다이렉트 검사),
-출처별 실패 격리(한 곳이 실패해도 다른 곳은 수집), 실패해도 기존 뉴스는 그대로 보이고 `news_sources`에 마지막 성공 시각·오류가 남습니다.
-중복은 `(출처, 출처 게시물 ID)`와 정규화한 원문 주소(`url_key`)로 막고, 다시 수집하면 제목·게시일 등을 갱신합니다.
-게시일을 알 수 없으면 `published_at`은 NULL로 둡니다(오늘 날짜로 채우지 않음). **관리자가 숨긴 소식(`is_published=false`)은 재수집해도 되살아나지 않고,
-분류·소개를 고친 소식(`edited_by_admin`)은 덮어쓰지 않습니다.**
-
-**API**
-- 앱(로그인 필요): `GET /api/news?category=disease|environment|support|policy&page=1&pageSize=20` → `{items, page, pageSize, hasMore}`
-  (원문 게시일 최신순, 숨김 제외), `GET /api/news/:id`(숨김·없는 소식은 404).
-- 관리자(`X-Admin-Key`, 일반 사용자 토큰으로는 401): `GET /api/admin/news`(숨김 포함, `category/published/q/page`),
-  `PATCH /api/admin/news/:id` `{category?, summary?, isPublished?}`, `POST /api/admin/news/collect` `{backfill?}`, `GET /api/admin/news/sources`.
-  관리자 대시보드의 "수산 뉴스 관리" 화면이 이 API를 씁니다.
-- 뉴스는 알림·푸시·미확인 배지와 무관합니다(알림 유형에 뉴스가 없음).
-
-**운영**
-- 새 환경변수는 전부 선택입니다: `NEWS_COLLECTION_ENABLED`(기본 켜짐), `NEWS_USER_AGENT`(요청에 붙는 이름·연락처, 기본 `AquaConnectNewsBot/1.0 (+https://aquaconnect-mvp.vercel.app)`).
-  관리자 화면·수동 수집을 쓰려면 기존 `ADMIN_API_KEY`가 필요합니다.
-- 배포 순서: 서버 배포 → `npm run migrate`(015) → 첫 슬롯에서 최근 30일치가 자동 수집됩니다. 바로 채우려면 `npm run news:collect`.
-- 점검: `npm run news:collect`(이 출처를 처음이면 30일치, `-- --backfill`로 다시 보충), `npm test`(분류·파서·시각 계산).
-  DB까지 검증하려면 **전용** DB 주소를 `NEWS_TEST_DATABASE_URL`에 넣고 `npm test`(news_* 표를 비우므로 운영 DB 금지).

@@ -69,9 +69,9 @@ publicRouter.post('/reports/:token/inquiries', async (req, res) => {
   if (!farm) return res.status(404).json({ error: '링크가 만료되었거나 존재하지 않습니다.' });
 
   await query('insert into inquiries (share_link_id, farm_id, message) values ($1, $2, $3)', [link.id, farm.id, message]);
-  await query(
+  const { rows: memoRows } = await query(
     `insert into memos (org_id, farm_id, author_type, author_name, content, tags)
-     values ($1, $2, 'farm', $3, $4, $5)`,
+     values ($1, $2, 'farm', $3, $4, $5) returning id`,
     [farm.org_id, farm.id, `어가 · ${farm.name}`, message, ['문의']],
   );
 
@@ -81,7 +81,7 @@ publicRouter.post('/reports/:token/inquiries', async (req, res) => {
     type: 'inquiry',
     title: `어가 문의 · ${farm.name}`,
     body: preview.length > 80 ? `${preview.slice(0, 80)}…` : preview,
-    link: `/reports/${farm.id}`,
+    link: `/memo?memo=${memoRows[0].id}`,
   });
 
   res.status(201).json({ ok: true });
