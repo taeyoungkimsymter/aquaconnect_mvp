@@ -17,6 +17,7 @@ import '../../data/models/farm_group.dart';
 import '../../data/models/risk_level.dart';
 import '../../data/services/farm_group_store.dart';
 import '../notifications/notification_permission_sheet.dart';
+import 'farm_region_section.dart';
 import 'ocean_environment_section.dart';
 import 'onboarding_checklist_card.dart';
 import 'today_tasks_card.dart';
@@ -205,6 +206,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     error: (e, _) => Text('불러오기 실패: $e'),
                   ),
+                  const SizedBox(height: 24),
+                  const FarmRegionSection(),
                 ]),
               ),
             ),
